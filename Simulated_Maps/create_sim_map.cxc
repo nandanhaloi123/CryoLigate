@@ -1,0 +1,5 @@
+open ../TEMP/TEMP_ligand.mol2
+molmap #1 2
+save TEMP_ligand.mrc
+exit
+relion_image_handler --i TEMP_ligand.mrc --new_box 64 --o TEMP_ligand_scaled_boxed.mrc
