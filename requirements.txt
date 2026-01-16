@@ -1,0 +1,15 @@
+torch
+timm
+einops
+rdkit-pypi
+h5py
+gemmi
+biopython
+mrcfile
+pandas
+numpy
+requests
+tqdm
+pyarrow
+openpyxl
+scipy
