@@ -1,33 +1,12 @@
 import torch
 import torch.nn as nn
 import numpy as np
-import h5py
-from torch.utils.data import Dataset
 from timm.models.layers import trunc_normal_, DropPath
 from einops import rearrange 
 from einops.layers.torch import Rearrange
-from rdkit import Chem
-from rdkit.Chem import AllChem
 
 # ==========================================
-# 1. RDKit Helper
-# ==========================================
-def smiles_to_embedding(smiles, radius=2, nBits=1024):
-    """Converts SMILES to a binary fingerprint."""
-    try:
-        if isinstance(smiles, bytes): smiles = smiles.decode('utf-8')
-        mol = Chem.MolFromSmiles(smiles)
-        if mol is None: return np.zeros(nBits, dtype=np.float32)
-        fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius, nBits=nBits)
-        arr = np.zeros((0,), dtype=np.int8)
-        from rdkit.DataStructs import ConvertToNumpyArray
-        ConvertToNumpyArray(fp, arr)
-        return arr.astype(np.float32)
-    except:
-        return np.zeros(nBits, dtype=np.float32)
-
-# ==========================================
-# 2. SCUNet Architecture (Full Implementation)
+# 1. SCUNet Components
 # ==========================================
 
 class FilterResponseNorm3d(nn.Module):
@@ -180,13 +159,23 @@ class SCUNet(nn.Module):
         )
         
         begin += config[2]
-        self.m_body = [ConvTransBlock(8*dim, 8*dim, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW', input_resolution//8) for i in range(config[3])]
+        # FIX 1: Body uses 4*dim split (Total 8*dim = 256 input)
+        self.m_body = [ConvTransBlock(4*dim, 4*dim, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW', input_resolution//8) for i in range(config[3])]
+        
         begin += config[3]
-        self.m_up3 = [nn.ConvTranspose3d(8*dim, 4*dim, 2, 2, 0, bias=False),] + [ConvTransBlock(4*dim, 4*dim, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW',input_resolution//4) for i in range(config[4])]
+        # FIX 2: m_up3 reduces to 4*dim (128). Blocks must use 2*dim split (Total 128 input).
+        self.m_up3 = [nn.ConvTranspose3d(8*dim, 4*dim, 2, 2, 0, bias=False),] + \
+                     [ConvTransBlock(2*dim, 2*dim, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW',input_resolution//4) for i in range(config[4])]
+        
         begin += config[4]
-        self.m_up2 = [nn.ConvTranspose3d(4*dim, 2*dim, 2, 2, 0, bias=False),] + [ConvTransBlock(2*dim, 2*dim, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW', input_resolution//2) for i in range(config[5])]
+        # FIX 3: m_up2 reduces to 2*dim (64). Blocks must use dim split (Total 64 input).
+        self.m_up2 = [nn.ConvTranspose3d(4*dim, 2*dim, 2, 2, 0, bias=False),] + \
+                     [ConvTransBlock(dim, dim, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW', input_resolution//2) for i in range(config[5])]
+        
         begin += config[5]
-        self.m_up1 = [nn.ConvTranspose3d(2*dim, dim, 2, 2, 0, bias=False),] + [ConvTransBlock(dim//2, dim//2, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW', input_resolution) for i in range(config[6])]
+        # m_up1 reduces to dim (32). Blocks use dim//2 split (Total 32 input). This was already correct.
+        self.m_up1 = [nn.ConvTranspose3d(2*dim, dim, 2, 2, 0, bias=False),] + \
+                     [ConvTransBlock(dim//2, dim//2, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW', input_resolution) for i in range(config[6])]
         
         self.m_tail = [nn.Conv3d(dim, n_classes, 3, 1, 1, bias=False)]
 
@@ -219,36 +208,7 @@ class SCUNet(nn.Module):
         return out
 
 # ==========================================
-# 3. Dataset Loader
-# ==========================================
-class CryoEMDataset(Dataset):
-    def __init__(self, h5_path, ligand_dim=1024):
-        self.h5_path = h5_path
-        self.ligand_dim = ligand_dim
-        print(f"Loading Dataset from {h5_path}...")
-        with h5py.File(h5_path, 'r') as f:
-            self.length = len(f['pdb_ids'])
-            print("  > Generating Ligand Fingerprints...")
-            self.embeddings = []
-            smiles_list = f['ligand_smiles'][:]
-            for s in smiles_list:
-                s_str = s.decode('utf-8') if isinstance(s, bytes) else s
-                emb = smiles_to_embedding(s_str, nBits=self.ligand_dim)
-                self.embeddings.append(emb)
-            self.embeddings = np.array(self.embeddings)
-
-    def __len__(self):
-        return self.length
-
-    def __getitem__(self, idx):
-        with h5py.File(self.h5_path, 'r', swmr=True) as f:
-            inputs = torch.from_numpy(f['maps'][idx]).float()
-            target = torch.from_numpy(f['ground_truth_maps'][idx]).unsqueeze(0).float()
-        lig_emb = torch.from_numpy(self.embeddings[idx]).float()
-        return inputs, lig_emb, target
-
-# ==========================================
-# 4. Loss Function
+# 2. Custom Loss Function
 # ==========================================
 class CustomLoss(nn.Module):
     def forward(self, inputs, targets, alpha=1.0, beta=1.0):

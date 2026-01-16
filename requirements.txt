@@ -7,9 +7,10 @@ gemmi
 biopython
 mrcfile
 pandas
-numpy
+numpy<2.0
 requests
 tqdm
 pyarrow
 openpyxl
 scipy
+matplotlib
