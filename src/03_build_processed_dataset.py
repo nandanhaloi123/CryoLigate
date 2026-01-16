@@ -43,6 +43,7 @@ class SelectComplex(Select):
     def __init__(self, target_ligand):
         self.target = target_ligand
     def accept_residue(self, residue):
+        # Keeps the specific ligand instance + protein environment
         return 1 if (residue == self.target or residue.id[0] == " ") else 0
 
 def get_atoms(residues):
@@ -64,7 +65,7 @@ def resample_em_map(grid, target_voxel):
         new_size[2] * target_voxel,
         90, 90, 90
     ))
-    gemmi.interpolate_grid(new_grid, grid, gemmi.Transform(), order=2)
+    gemmi.interpolate_grid(new_grid, grid, gemmi.Transform(), order=3)
     return new_grid
 
 def coord_to_grid_index(coord, grid):
@@ -86,18 +87,13 @@ def generate_synthetic_map(atoms, origin_angstroms, box_size, voxel_size, resolu
     2. Blurs the entire grid with a Gaussian.
     3. Applies tanh saturation to fix the 'hot core' issue.
     """
-    # 1. Create Empty Grid
     grid = np.zeros((box_size, box_size, box_size), dtype=np.float32)
     
-    # 2. Map Atoms to Grid Indices
-    # We populate the grid with 1.0s where atoms are.
-    # We check bounds to avoid errors.
     count = 0
     for atom in atoms:
         elem = atom.element.upper().strip()
-        if elem == 'H': continue # Skip hydrogens
+        if elem == 'H': continue 
 
-        # Convert World Coord -> Box Index
         rel_pos = (atom.coord - origin_angstroms) / voxel_size
         idx = np.round(rel_pos).astype(np.int32)
         
@@ -107,27 +103,18 @@ def generate_synthetic_map(atoms, origin_angstroms, box_size, voxel_size, resolu
             grid[idx[0], idx[1], idx[2]] += 1.0
             count += 1
 
-    if count == 0:
-        return grid
+    if count == 0: return grid
 
-    # 3. Calculate Sigma for Gaussian Filter
     # ChimeraX Formula: sigma = 0.225 * resolution
     sigma_angstrom = 0.225 * resolution
     sigma_pixels = sigma_angstrom / voxel_size
 
-    # 4. Apply Gaussian Filter (The "Blur")
-    # This creates the smooth blobs and naturally sums overlapping densities.
+    # Apply Gaussian Filter (The "Blur")
     density = scipy.ndimage.gaussian_filter(grid, sigma=sigma_pixels, mode='constant', cval=0.0)
 
-    # 5. Apply Soft Saturation (The Fix for "Unevenness")
-    # Tanh compresses high values (core) while keeping low values (surface) linear.
-    # We scale it so that a single atom (peak ~0.02 depending on sigma) is well visible.
-    
-    # Heuristic: Normalize so the max is around 1.0, then saturate outliers.
+    # Apply Soft Saturation (The Fix for "Unevenness")
     peak_approx = np.max(density)
     if peak_approx > 0:
-        # Scale so the typical 'surface' density is around 0.5 - 1.0
-        # This pushes the 'core' density into the flat part of the tanh curve.
         density = np.tanh(density / (peak_approx * 0.3 + 1e-6))
 
     return density
@@ -147,15 +134,23 @@ def process_ligand_multichannel(task, h5file, index):
         residues = list(structure.get_residues())
 
         protein_atoms = get_atoms([r for r in residues if r.id[0] == " "])
-        ligand_residues = [r for r in residues if r.resname == ligand_ccd and r.id[0] != " "]
         
-        if ligand_idx > len(ligand_residues): return
+        # Find ALL instances of the ligand
+        ligand_residues = [r for r in residues if r.resname == ligand_ccd]
+        
+        # Safety check for index
+        if ligand_idx > len(ligand_residues): 
+            print(f"Skipping {pdb_id} instance {ligand_idx} (not found)")
+            return
+            
+        # Select the SPECIFIC instance for this task
         target_ligand = ligand_residues[ligand_idx - 1]
         ligand_atoms = list(target_ligand.get_atoms())
         all_atoms = protein_atoms + ligand_atoms
 
-        # Save Clean PDB
-        pdb_out_path = output_subdir / f"{pdb_id}_clean.pdb"
+        # Save Clean PDB (Specific to this ligand instance)
+        # We append _i to the filename to distinguish instances
+        pdb_out_path = output_subdir / f"{pdb_id}_{ligand_ccd}_{ligand_idx}_clean.pdb"
         io = PDBIO()
         io.set_structure(structure)
         io.save(str(pdb_out_path), select=SelectComplex(target_ligand))
@@ -182,7 +177,7 @@ def process_ligand_multichannel(task, h5file, index):
         phys_origin_vec = grid.unit_cell.orthogonalize(frac_origin)
         phys_origin = np.array([phys_origin_vec.x, phys_origin_vec.y, phys_origin_vec.z])
 
-        # --- GENERATE GROUND TRUTH (SCIPY VERSION) ---
+        # --- GENERATE GROUND TRUTH ---
         synthetic_density = generate_synthetic_map(
             all_atoms, 
             phys_origin, 
@@ -191,7 +186,7 @@ def process_ligand_multichannel(task, h5file, index):
             SYNTHETIC_RESOLUTION
         )
         
-        # Normalize (Standard Z-score for final output)
+        # Normalize
         syn_mean, syn_std = np.mean(synthetic_density), np.std(synthetic_density)
         synthetic_density = (synthetic_density - syn_mean) / (syn_std + 1e-6)
 
@@ -224,7 +219,7 @@ def process_ligand_multichannel(task, h5file, index):
             h5file['centroids'][index] = centroid
             h5file['crop_start_voxel'][index] = start
 
-        # Save MRCs
+        # Save MRCs (Unique filenames for each instance)
         out_mrc = output_subdir / f"ml_map_{ligand_ccd}_{ligand_idx}.mrc"
         with mrcfile.new(str(out_mrc), overwrite=True) as mrc:
             mrc.set_data(np.ascontiguousarray(density.T)) 
@@ -259,7 +254,9 @@ if __name__ == "__main__":
     metadata = loaded["data"].item()
 
     tasks = []
-    print("Preparing tasks...")
+    print("Scanning PDBs for ligand instances...")
+    
+    # We iterate through metadata and PRE-SCAN PDBs to find all ligand instances
     for pdb_id, ccds, smiles in zip(metadata["pdb_ids"], metadata["ligand_names"], metadata["ligand_smiles"]):
         pdb_dir = RAW_DATA_DIR / pdb_id.lower()
         if not pdb_dir.exists(): continue
@@ -267,10 +264,33 @@ if __name__ == "__main__":
         if not pdb_files: continue
         
         if not glob.glob(os.path.join(pdb_dir, "EMD-*.map.gz")): continue
+        
+        # --- NEW LOGIC: OPEN PDB TO COUNT INSTANCES ---
+        try:
+            parser = PDBParser(QUIET=True)
+            # Just parsing to count ligands
+            s = parser.get_structure("temp", pdb_files[0])
+            target_ccd = ccds[0]
+            
+            # Find all residues matching the CCD
+            # Note: We relax the check to include HETATM/ATOM as long as resname matches
+            lig_instances = [r for r in s.get_residues() if r.resname == target_ccd]
+            count = len(lig_instances)
+            
+            if count == 0:
+                print(f"  [Skip] {pdb_id}: Ligand {target_ccd} not found in PDB.")
+                continue
+            
+            print(f"  [Add]  {pdb_id}: Found {count} instances of {target_ccd}")
 
-        tasks.append((str(pdb_dir), pdb_files[0], pdb_id, ccds[0], smiles[0], 1))
+            # Create a task for EACH instance (1-based index)
+            for i in range(1, count + 1):
+                tasks.append((str(pdb_dir), pdb_files[0], pdb_id, target_ccd, smiles[0], i))
 
-    print(f"Found {len(tasks)} valid tasks.")
+        except Exception as e:
+            print(f"  [Error] Scanning {pdb_id}: {e}")
+
+    print(f"\nFound {len(tasks)} total training samples.")
     
     with h5py.File(OUTPUT_H5, "w") as h5:
         N = len(tasks)
