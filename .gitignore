@@ -3,7 +3,6 @@
 data/raw/
 data/processed/
 data/metadata/*.npz
-data/metadata/*.xlsx
 data/metadata/*.csv
 
 # Keep the folder structure but ignore content (optional, good for sharing structure)
