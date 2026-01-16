@@ -9,6 +9,7 @@ data/metadata/*.csv
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/metadata/.gitkeep
+!data/metadata/*.xlsx
 
 # --- Model Checkpoints ---
 checkpoints/
