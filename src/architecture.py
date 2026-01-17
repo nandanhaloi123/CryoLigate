@@ -6,7 +6,7 @@ from einops import rearrange
 from einops.layers.torch import Rearrange
 
 # ==========================================
-# 1. SCUNet Components
+# SCUNet Components
 # ==========================================
 
 class FilterResponseNorm3d(nn.Module):
@@ -159,21 +159,17 @@ class SCUNet(nn.Module):
         )
         
         begin += config[2]
-        # FIX 1: Body uses 4*dim split (Total 8*dim = 256 input)
         self.m_body = [ConvTransBlock(4*dim, 4*dim, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW', input_resolution//8) for i in range(config[3])]
         
         begin += config[3]
-        # FIX 2: m_up3 reduces to 4*dim (128). Blocks must use 2*dim split (Total 128 input).
         self.m_up3 = [nn.ConvTranspose3d(8*dim, 4*dim, 2, 2, 0, bias=False),] + \
                      [ConvTransBlock(2*dim, 2*dim, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW',input_resolution//4) for i in range(config[4])]
         
         begin += config[4]
-        # FIX 3: m_up2 reduces to 2*dim (64). Blocks must use dim split (Total 64 input).
         self.m_up2 = [nn.ConvTranspose3d(4*dim, 2*dim, 2, 2, 0, bias=False),] + \
                      [ConvTransBlock(dim, dim, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW', input_resolution//2) for i in range(config[5])]
         
         begin += config[5]
-        # m_up1 reduces to dim (32). Blocks use dim//2 split (Total 32 input). This was already correct.
         self.m_up1 = [nn.ConvTranspose3d(2*dim, dim, 2, 2, 0, bias=False),] + \
                      [ConvTransBlock(dim//2, dim//2, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW', input_resolution) for i in range(config[6])]
         
@@ -206,21 +202,3 @@ class SCUNet(nn.Module):
         x_up1 = self.m_up1(x_up2+x2)
         out = self.m_tail(x_up1+x1)
         return out
-
-# ==========================================
-# 2. Custom Loss Function
-# ==========================================
-class CustomLoss(nn.Module):
-    def forward(self, inputs, targets, alpha=1.0, beta=1.0):
-        mse_loss = ((inputs - targets) ** 2).mean()
-        
-        # Simple SSIM Approx
-        epsilon = 1e-6
-        inputs_mean = inputs.mean(dim=(2, 3, 4), keepdim=True)
-        targets_mean = targets.mean(dim=(2, 3, 4), keepdim=True)
-        cov = ((inputs - inputs_mean) * (targets - targets_mean)).mean(dim=(2, 3, 4))
-        inputs_var = inputs.var(dim=(2, 3, 4))
-        targets_var = targets.var(dim=(2, 3, 4))
-        ssim_loss = (1.0 - (2 * cov + epsilon) / (inputs_var + targets_var + epsilon)).mean()
-
-        return alpha*mse_loss + beta*ssim_loss

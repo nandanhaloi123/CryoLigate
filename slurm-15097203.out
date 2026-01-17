@@ -76,3 +76,48 @@ Epoch 067 | Train: 0.0434 | Val: 0.0433 | Pocket Err: 0.0687
 Epoch 068 | Train: 0.0433 | Val: 0.0402 | Pocket Err: 0.0601
 Epoch 069 | Train: 0.0410 | Val: 0.0397 | Pocket Err: 0.0608
 Epoch 070 | Train: 0.0399 | Val: 0.0398 | Pocket Err: 0.0597
+Epoch 071 | Train: 0.0444 | Val: 0.0507 | Pocket Err: 0.0842
+Epoch 072 | Train: 0.0461 | Val: 0.0410 | Pocket Err: 0.0636
+Epoch 073 | Train: 0.0381 | Val: 0.0372 | Pocket Err: 0.0554
+Epoch 074 | Train: 0.0388 | Val: 0.0376 | Pocket Err: 0.0580
+Epoch 075 | Train: 0.0373 | Val: 0.0427 | Pocket Err: 0.0705
+Epoch 076 | Train: 0.0383 | Val: 0.0364 | Pocket Err: 0.0537
+Epoch 077 | Train: 0.0382 | Val: 0.0366 | Pocket Err: 0.0565
+Epoch 078 | Train: 0.0342 | Val: 0.0440 | Pocket Err: 0.0732
+Epoch 079 | Train: 0.0336 | Val: 0.0380 | Pocket Err: 0.0623
+Epoch 080 | Train: 0.0330 | Val: 0.0370 | Pocket Err: 0.0592
+Epoch 081 | Train: 0.0352 | Val: 0.0407 | Pocket Err: 0.0683
+Epoch 082 | Train: 0.0309 | Val: 0.0338 | Pocket Err: 0.0528
+Epoch 083 | Train: 0.0305 | Val: 0.0374 | Pocket Err: 0.0603
+Epoch 084 | Train: 0.0297 | Val: 0.0372 | Pocket Err: 0.0612
+Epoch 085 | Train: 0.0301 | Val: 0.0380 | Pocket Err: 0.0582
+Epoch 086 | Train: 0.0325 | Val: 0.0364 | Pocket Err: 0.0559
+Epoch 087 | Train: 0.0280 | Val: 0.0422 | Pocket Err: 0.0584
+Epoch 088 | Train: 0.0284 | Val: 0.0357 | Pocket Err: 0.0597
+Epoch 089 | Train: 0.0260 | Val: 0.0330 | Pocket Err: 0.0535
+Epoch 090 | Train: 0.0251 | Val: 0.0321 | Pocket Err: 0.0518
+Epoch 091 | Train: 0.0248 | Val: 0.0350 | Pocket Err: 0.0561
+Epoch 092 | Train: 0.0258 | Val: 0.0401 | Pocket Err: 0.0632
+Epoch 093 | Train: 0.0258 | Val: 0.0335 | Pocket Err: 0.0547
+Epoch 094 | Train: 0.0247 | Val: 0.0318 | Pocket Err: 0.0504
+Epoch 095 | Train: 0.0270 | Val: 0.0367 | Pocket Err: 0.0577
+Epoch 096 | Train: 0.0243 | Val: 0.0327 | Pocket Err: 0.0525
+Epoch 097 | Train: 0.0251 | Val: 0.0425 | Pocket Err: 0.0639
+Epoch 098 | Train: 0.0269 | Val: 0.0351 | Pocket Err: 0.0555
+Epoch 099 | Train: 0.0254 | Val: 0.0400 | Pocket Err: 0.0616
+Epoch 100 | Train: 0.0257 | Val: 0.0351 | Pocket Err: 0.0556
+
+--- Exporting Verification Samples ---
+--- Exporting 5 samples to /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/results/predictions_train ---
+   Saved 8tzg
+   Saved 7we4
+   Saved 6kzp
+   Saved 8jwf
+   Saved 8jwg
+--- Exporting 5 samples to /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/results/predictions_val ---
+   Saved 7y7z
+   Saved 8j75
+   Saved 8txz
+   Saved 8t69
+   Saved 8wfk
+Done. Check /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/results/predictions_val for aligned results.

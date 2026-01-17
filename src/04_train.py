@@ -14,7 +14,8 @@ import sys
 
 # --- IMPORT CUSTOM MODULES ---
 sys.path.append(str(Path(__file__).resolve().parent))
-from architecture import SCUNet, CustomLoss
+from architecture import SCUNet               # <--- Imported from architecture.py
+from loss import WeightedMSELoss              # <--- Imported from loss.py
 from utils_common import save_mrc_with_origin
 
 # --- CONFIGURATION ---
@@ -29,19 +30,19 @@ HDF5_FILE = DATA_DIR / "ml_dataset.h5"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # --- HYPERPARAMETERS ---
-# Increased Batch Size for Multi-GPU (e.g., 4 GPUs = 2 samples per GPU)
-BATCH_SIZE = 8  
+BATCH_SIZE = 8
 EPOCHS = 100
 LR = 1e-4
 LIGAND_DIM = 1024
 VOXEL_SIZE = 0.5 
+LIGAND_WEIGHT = 50.0  # <--- The penalty multiplier for ligand errors
 
 # Ensure directories exist
 CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
 PLOT_DIR.mkdir(parents=True, exist_ok=True)
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-# --- DATASET CLASS ---
+# --- DATASET CLASS (Updated to return Mask) ---
 class CryoEMDataset(Dataset):
     def __init__(self, h5_path, ligand_dim=1024):
         self.h5_path = h5_path
@@ -55,8 +56,7 @@ class CryoEMDataset(Dataset):
         try:
             smiles = smiles_bytes.decode('utf-8')
             mol = Chem.MolFromSmiles(smiles)
-            if mol is None:
-                return torch.zeros(self.ligand_dim, dtype=torch.float32)
+            if mol is None: return torch.zeros(self.ligand_dim, dtype=torch.float32)
             fp = AllChem.GetMorganFingerprintAsBitVect(mol, 2, nBits=self.ligand_dim)
             return torch.from_numpy(np.array(fp, dtype=np.float32))
         except:
@@ -73,8 +73,13 @@ class CryoEMDataset(Dataset):
         protein_mask = self.h5_file['maps'][idx][0]
         
         input_tensor = np.stack([exp_density, protein_mask], axis=0)
+        
         target = self.h5_file['ground_truth_maps'][idx]
         target = np.expand_dims(target, axis=0)
+
+        # LOAD THE MASK (0 or 1)
+        lig_mask = self.h5_file['masks'][idx]
+        lig_mask = np.expand_dims(lig_mask, axis=0)
 
         smiles = self.h5_file['ligand_smiles'][idx]
         ligand_emb = self._get_fingerprint(smiles)
@@ -82,21 +87,23 @@ class CryoEMDataset(Dataset):
         return (
             torch.from_numpy(input_tensor).float(), 
             ligand_emb.float(), 
-            torch.from_numpy(target).float()
+            torch.from_numpy(target).float(),
+            torch.from_numpy(lig_mask).float()  # <--- Returning mask
         )
 
-# --- HELPER: METRICS PLOTTING ---
+# --- HELPER: PLOTTING ---
 def plot_metrics(history, save_path):
     epochs = range(1, len(history['train_loss']) + 1)
     fig, axs = plt.subplots(2, 2, figsize=(12, 10))
     
     axs[0, 0].plot(epochs, history['train_loss'], label='Train')
     axs[0, 0].plot(epochs, history['val_loss'], label='Val')
-    axs[0, 0].set_title('Loss (MSE + SSIM)')
+    axs[0, 0].set_title(f'Weighted Loss (Factor={LIGAND_WEIGHT})')
     axs[0, 0].legend()
+    axs[0, 0].set_yscale('log')
     
     axs[0, 1].plot(epochs, history['masked_mse'], 'r')
-    axs[0, 1].set_title('Masked MSE (Error inside pocket)')
+    axs[0, 1].set_title('Ligand Only MSE (Raw Error)')
     axs[0, 1].set_yscale('log')
     
     axs[1, 0].plot(epochs, history['grad_norm'], 'g')
@@ -109,26 +116,18 @@ def plot_metrics(history, save_path):
     plt.savefig(save_path)
     plt.close()
 
-# --- HELPER: 3D VISUALIZATION EXPORT ---
+# --- HELPER: 3D EXPORT ---
 def save_mrc_samples(model, subset, folder_name, device, num_samples=5):
-    """
-    Exports aligned .mrc files.
-    """
     model.eval()
     output_dir = RESULTS_DIR / folder_name
     output_dir.mkdir(parents=True, exist_ok=True)
     
     n_samples = min(num_samples, len(subset))
     if n_samples == 0: return
-
     indices = random.sample(subset.indices, n_samples)
     
     with h5py.File(HDF5_FILE, 'r') as f:
         print(f"--- Exporting {len(indices)} samples to {output_dir} ---")
-        
-        if 'physical_origin' not in f:
-            raise KeyError("CRITICAL ERROR: 'physical_origin' missing. Re-run data generation.")
-
         for idx in indices:
             exp_density = f['exp_density'][idx]
             protein_mask = f['maps'][idx][0]
@@ -153,51 +152,36 @@ def save_mrc_samples(model, subset, folder_name, device, num_samples=5):
             pred_np = pred_tensor.cpu().numpy().squeeze()
             base_name = f"{pdb_id}"
             
-            # Save files (.T transposed for ChimeraX)
             save_mrc_with_origin(pred_np.T, output_dir / f"{base_name}_pred.mrc", VOXEL_SIZE, phys_origin)
             save_mrc_with_origin(ground_truth.T, output_dir / f"{base_name}_gt.mrc", VOXEL_SIZE, phys_origin)
             save_mrc_with_origin(exp_density.T, output_dir / f"{base_name}_input.mrc", VOXEL_SIZE, phys_origin)
-            
             print(f"   Saved {base_name}")
 
-# --- MAIN TRAINING LOOP ---
+# --- MAIN LOOP ---
 def main():
     print(f"--- Initializing Training on {DEVICE} ---")
-    
-    # 1. GPU Check
     gpu_count = torch.cuda.device_count()
     print(f"Available GPUs: {gpu_count}")
     
-    if not HDF5_FILE.exists():
-        raise FileNotFoundError(f"Dataset not found at {HDF5_FILE}")
+    if not HDF5_FILE.exists(): raise FileNotFoundError(f"Dataset not found at {HDF5_FILE}")
         
     full_dataset = CryoEMDataset(HDF5_FILE, ligand_dim=LIGAND_DIM)
-    
     train_size = int(0.9 * len(full_dataset))
     val_size = len(full_dataset) - train_size
     train_data, val_data = random_split(full_dataset, [train_size, val_size])
     
-    # Increase num_workers for faster data loading
     train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, num_workers=8, pin_memory=True)
     val_loader = DataLoader(val_data, batch_size=BATCH_SIZE, shuffle=False, num_workers=8, pin_memory=True)
     
-    # 2. Model Setup
     model = SCUNet(in_nc=2, ligand_dim=LIGAND_DIM).to(DEVICE)
-    
-    # --- MULTI-GPU WRAPPER ---
-    if gpu_count > 1:
-        print(f"--> Wrapping model with DataParallel on {gpu_count} GPUs")
-        model = nn.DataParallel(model)
+    if gpu_count > 1: model = nn.DataParallel(model)
     
     optimizer = optim.AdamW(model.parameters(), lr=LR)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
     
-    try:
-        criterion = CustomLoss().to(DEVICE)
-        print("Using CustomLoss")
-    except:
-        criterion = nn.MSELoss().to(DEVICE)
-        print("Using MSELoss")
+    # --- NEW LOSS ---
+    criterion = WeightedMSELoss(ligand_weight=LIGAND_WEIGHT).to(DEVICE)
+    print(f"Using WeightedMSELoss (Ligand Penalty: {LIGAND_WEIGHT}x)")
 
     history = {'train_loss': [], 'val_loss': [], 'lr': [], 'grad_norm': [], 'masked_mse': []}
     best_loss = float('inf')
@@ -209,15 +193,20 @@ def main():
             train_loss_accum = 0
             grad_norm_accum = 0
             
-            for inputs, lig_emb, targets in train_loader:
-                inputs, lig_emb, targets = inputs.to(DEVICE), lig_emb.to(DEVICE), targets.to(DEVICE)
+            # Unpack 4 items now (Mask added)
+            for inputs, lig_emb, targets, lig_masks in train_loader:
+                inputs = inputs.to(DEVICE)
+                lig_emb = lig_emb.to(DEVICE)
+                targets = targets.to(DEVICE)
+                lig_masks = lig_masks.to(DEVICE) # <--- To Device
                 
                 optimizer.zero_grad()
                 preds = model(inputs, lig_emb)
-                loss = criterion(preds, targets)
+                
+                # Pass mask to loss
+                loss = criterion(preds, targets, lig_masks) 
                 loss.backward()
                 
-                # Grad Norm (handle DataParallel parameters)
                 total_norm = 0
                 for p in model.parameters():
                     if p.grad is not None:
@@ -234,16 +223,18 @@ def main():
             masked_mse_accum = 0
             
             with torch.no_grad():
-                for inputs, lig_emb, targets in val_loader:
-                    inputs, lig_emb, targets = inputs.to(DEVICE), lig_emb.to(DEVICE), targets.to(DEVICE)
+                for inputs, lig_emb, targets, lig_masks in val_loader:
+                    inputs, lig_emb, targets, lig_masks = inputs.to(DEVICE), lig_emb.to(DEVICE), targets.to(DEVICE), lig_masks.to(DEVICE)
                     preds = model(inputs, lig_emb)
-                    val_loss_accum += criterion(preds, targets).item()
                     
-                    roi_mask = (targets > 0.05)
+                    val_loss_accum += criterion(preds, targets, lig_masks).item()
+                    
+                    # Calculate Pure Masked MSE (for plotting only)
+                    roi_mask = (lig_masks > 0.5)
                     if roi_mask.sum() > 0:
                         masked_mse = ((preds - targets)**2)[roi_mask].mean().item()
                     else:
-                        masked_mse = ((preds - targets)**2).mean().item()
+                        masked_mse = 0.0
                     masked_mse_accum += masked_mse
 
             avg_train_loss = train_loss_accum / len(train_loader)
@@ -258,12 +249,10 @@ def main():
             
             scheduler.step(avg_val_loss)
             
-            print(f"Epoch {epoch+1:03d} | Train: {avg_train_loss:.4f} | Val: {avg_val_loss:.4f} | Pocket Err: {avg_masked_mse:.4f}")
+            print(f"Epoch {epoch+1:03d} | Train: {avg_train_loss:.5f} | Val: {avg_val_loss:.5f} | Ligand MSE: {avg_masked_mse:.5f}")
             
-            # --- SAFE SAVING (Unwrap DataParallel) ---
             if avg_val_loss < best_loss:
                 best_loss = avg_val_loss
-                # If wrapped, access .module to save clean weights
                 state_dict = model.module.state_dict() if isinstance(model, nn.DataParallel) else model.state_dict()
                 torch.save(state_dict, CHECKPOINT_DIR / "best_model.pth")
             
@@ -277,18 +266,13 @@ def main():
     print("\n--- Exporting Verification Samples ---")
     best_path = CHECKPOINT_DIR / "best_model.pth"
     if best_path.exists():
-        # Load weights into unwrapped model or wrapped model?
-        # Best approach: load into wrapped model for inference consistency
         state_dict = torch.load(best_path, map_location=DEVICE)
-        if isinstance(model, nn.DataParallel):
-            model.module.load_state_dict(state_dict)
-        else:
-            model.load_state_dict(state_dict)
+        if isinstance(model, nn.DataParallel): model.module.load_state_dict(state_dict)
+        else: model.load_state_dict(state_dict)
     
     save_mrc_samples(model, train_data, "predictions_train", DEVICE)
     save_mrc_samples(model, val_data, "predictions_val", DEVICE)
-    
-    print(f"Done. Check {RESULTS_DIR}/predictions_val for aligned results.")
+    print(f"Done. Check {RESULTS_DIR}/predictions_val")
 
 if __name__ == "__main__":
     main()
