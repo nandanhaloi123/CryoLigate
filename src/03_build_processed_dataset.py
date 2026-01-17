@@ -6,12 +6,14 @@ import glob
 import numpy as np
 import threading
 import h5py
-import mrcfile
-import gemmi
-import scipy.ndimage 
 from pathlib import Path
 from tqdm.contrib.concurrent import thread_map
 from Bio.PDB import PDBParser, PDBIO, Select
+import gemmi
+import scipy.ndimage
+
+# --- IMPORT SHARED UTILS ---
+from utils_common import resample_em_map, coord_to_grid_index, save_mrc_with_origin
 
 # ----------------------------
 # PATH CONFIGURATION
@@ -28,10 +30,7 @@ METADATA_FILE = PROJECT_ROOT / "data" / "metadata" / "pdb_em_metadata.npz"
 # ----------------------------
 TARGET_VOXEL_SIZE = 0.5   
 GRID_SIZE = 96            
-
-# Resolution: 4.0A ensures atoms overlap smoothly without gaps.
 SYNTHETIC_RESOLUTION = 4.0 
-
 NUM_CHANNELS = 2
 MAX_WORKERS = 8
 h5_lock = threading.Lock()
@@ -43,7 +42,6 @@ class SelectComplex(Select):
     def __init__(self, target_ligand):
         self.target = target_ligand
     def accept_residue(self, residue):
-        # Keeps the specific ligand instance + protein environment
         return 1 if (residue == self.target or residue.id[0] == " ") else 0
 
 def get_atoms(residues):
@@ -52,40 +50,9 @@ def get_atoms(residues):
         atoms.extend(list(r.get_atoms()))
     return atoms
 
-def resample_em_map(grid, target_voxel):
-    new_size = [
-        int(round(grid.unit_cell.a / target_voxel)),
-        int(round(grid.unit_cell.b / target_voxel)),
-        int(round(grid.unit_cell.c / target_voxel))
-    ]
-    new_grid = gemmi.FloatGrid(*new_size)
-    new_grid.set_unit_cell(gemmi.UnitCell(
-        new_size[0] * target_voxel,
-        new_size[1] * target_voxel,
-        new_size[2] * target_voxel,
-        90, 90, 90
-    ))
-    gemmi.interpolate_grid(new_grid, grid, gemmi.Transform(), order=3)
-    return new_grid
-
-def coord_to_grid_index(coord, grid):
-    pos = gemmi.Position(coord[0], coord[1], coord[2])
-    fractional = grid.unit_cell.fractionalize(pos)
-    return np.array([
-        int(round(fractional.x * grid.nu)),
-        int(round(fractional.y * grid.nv)),
-        int(round(fractional.z * grid.nw)),
-    ], dtype=np.int32)
-
-# ----------------------------
-# ROBUST GAUSSIAN GENERATOR (SCIPY VERSION)
-# ----------------------------
 def generate_synthetic_map(atoms, origin_angstroms, box_size, voxel_size, resolution):
     """
     Generates a map using scipy.ndimage.gaussian_filter.
-    1. Places point sources (delta functions) at atom centers.
-    2. Blurs the entire grid with a Gaussian.
-    3. Applies tanh saturation to fix the 'hot core' issue.
     """
     grid = np.zeros((box_size, box_size, box_size), dtype=np.float32)
     
@@ -105,14 +72,13 @@ def generate_synthetic_map(atoms, origin_angstroms, box_size, voxel_size, resolu
 
     if count == 0: return grid
 
-    # ChimeraX Formula: sigma = 0.225 * resolution
     sigma_angstrom = 0.225 * resolution
     sigma_pixels = sigma_angstrom / voxel_size
 
-    # Apply Gaussian Filter (The "Blur")
+    # Apply Gaussian Filter
     density = scipy.ndimage.gaussian_filter(grid, sigma=sigma_pixels, mode='constant', cval=0.0)
 
-    # Apply Soft Saturation (The Fix for "Unevenness")
+    # Apply Soft Saturation
     peak_approx = np.max(density)
     if peak_approx > 0:
         density = np.tanh(density / (peak_approx * 0.3 + 1e-6))
@@ -134,28 +100,22 @@ def process_ligand_multichannel(task, h5file, index):
         residues = list(structure.get_residues())
 
         protein_atoms = get_atoms([r for r in residues if r.id[0] == " "])
-        
-        # Find ALL instances of the ligand
         ligand_residues = [r for r in residues if r.resname == ligand_ccd]
         
-        # Safety check for index
         if ligand_idx > len(ligand_residues): 
-            print(f"Skipping {pdb_id} instance {ligand_idx} (not found)")
             return
             
-        # Select the SPECIFIC instance for this task
         target_ligand = ligand_residues[ligand_idx - 1]
         ligand_atoms = list(target_ligand.get_atoms())
         all_atoms = protein_atoms + ligand_atoms
 
-        # Save Clean PDB (Specific to this ligand instance)
-        # We append _i to the filename to distinguish instances
+        # Save Clean PDB (for reference)
         pdb_out_path = output_subdir / f"{pdb_id}_{ligand_ccd}_{ligand_idx}_clean.pdb"
         io = PDBIO()
         io.set_structure(structure)
         io.save(str(pdb_out_path), select=SelectComplex(target_ligand))
 
-        # Experimental Map
+        # Experimental Map Processing
         em_maps = glob.glob(os.path.join(pdb_dir, "EMD-*.map.gz"))
         if not em_maps: return
         
@@ -167,17 +127,18 @@ def process_ligand_multichannel(task, h5file, index):
         center_idx = coord_to_grid_index(centroid, grid)
         half = GRID_SIZE // 2
         
-        start = center_idx - half
-        start = np.clip(start, [0, 0, 0], np.array(grid.shape) - GRID_SIZE)
+        start_idx = center_idx - half
+        start_idx = np.clip(start_idx, [0, 0, 0], np.array(grid.shape) - GRID_SIZE)
 
-        # Get Experimental Density
-        density = grid.get_subarray(start.tolist(), [GRID_SIZE, GRID_SIZE, GRID_SIZE]).astype(np.float32)
+        # Extract Density
+        density = grid.get_subarray(start_idx.tolist(), [GRID_SIZE, GRID_SIZE, GRID_SIZE]).astype(np.float32)
         
-        frac_origin = gemmi.Fractional(start[0]/grid.nu, start[1]/grid.nv, start[2]/grid.nw)
+        # --- CALCULATE PHYSICAL ORIGIN (Crucial for Alignment) ---
+        frac_origin = gemmi.Fractional(start_idx[0]/grid.nu, start_idx[1]/grid.nv, start_idx[2]/grid.nw)
         phys_origin_vec = grid.unit_cell.orthogonalize(frac_origin)
-        phys_origin = np.array([phys_origin_vec.x, phys_origin_vec.y, phys_origin_vec.z])
+        phys_origin = np.array([phys_origin_vec.x, phys_origin_vec.y, phys_origin_vec.z], dtype=np.float32)
 
-        # --- GENERATE GROUND TRUTH ---
+        # Generate Ground Truth
         synthetic_density = generate_synthetic_map(
             all_atoms, 
             phys_origin, 
@@ -187,21 +148,18 @@ def process_ligand_multichannel(task, h5file, index):
         )
         
         # Normalize
-        syn_mean, syn_std = np.mean(synthetic_density), np.std(synthetic_density)
-        synthetic_density = (synthetic_density - syn_mean) / (syn_std + 1e-6)
-
-        exp_mean, exp_std = np.mean(density), np.std(density)
-        density = (density - exp_mean) / (exp_std + 1e-6)
+        synthetic_density = (synthetic_density - np.mean(synthetic_density)) / (np.std(synthetic_density) + 1e-6)
+        density = (density - np.mean(density)) / (np.std(density) + 1e-6)
 
         # Masks
         data = np.zeros((NUM_CHANNELS, GRID_SIZE, GRID_SIZE, GRID_SIZE), np.float32)
         for atom in protein_atoms:
-            v = coord_to_grid_index(atom.coord, grid) - start
+            v = coord_to_grid_index(atom.coord, grid) - start_idx
             if np.all((v >= 0) & (v < GRID_SIZE)):
                 data[0, v[0], v[1], v[2]] = 1.0
 
         for atom in ligand_atoms:
-            v = coord_to_grid_index(atom.coord, grid) - start
+            v = coord_to_grid_index(atom.coord, grid) - start_idx
             if np.all((v >= 0) & (v < GRID_SIZE)):
                 data[1, v[0], v[1], v[2]] = 1.0
 
@@ -217,31 +175,22 @@ def process_ligand_multichannel(task, h5file, index):
             h5file['ligand_names'][index] = ligand_ccd.encode()
             h5file['ligand_smiles'][index] = ligand_smiles.encode()
             h5file['centroids'][index] = centroid
-            h5file['crop_start_voxel'][index] = start
+            h5file['crop_start_voxel'][index] = start_idx
+            # Save Origin for Training alignment
+            h5file['physical_origin'][index] = phys_origin
 
-        # Save MRCs (Unique filenames for each instance)
+        # --- CORRECTED: SAVE MRCs USING UTILS (WITH ORIGIN) ---
+        # We pass density.T to fix axis order for visualization tools like ChimeraX
         out_mrc = output_subdir / f"ml_map_{ligand_ccd}_{ligand_idx}.mrc"
-        with mrcfile.new(str(out_mrc), overwrite=True) as mrc:
-            mrc.set_data(np.ascontiguousarray(density.T)) 
-            mrc.voxel_size = TARGET_VOXEL_SIZE
-            mrc.header.origin.x = float(phys_origin[0])
-            mrc.header.origin.y = float(phys_origin[1])
-            mrc.header.origin.z = float(phys_origin[2])
-            mrc.update_header_from_data()
+        save_mrc_with_origin(density.T, out_mrc, TARGET_VOXEL_SIZE, phys_origin)
 
         out_syn_mrc = output_subdir / f"ml_gt_{ligand_ccd}_{ligand_idx}.mrc"
-        with mrcfile.new(str(out_syn_mrc), overwrite=True) as mrc:
-            mrc.set_data(np.ascontiguousarray(synthetic_density.T))
-            mrc.voxel_size = TARGET_VOXEL_SIZE
-            mrc.header.origin.x = float(phys_origin[0])
-            mrc.header.origin.y = float(phys_origin[1])
-            mrc.header.origin.z = float(phys_origin[2])
-            mrc.update_header_from_data()
+        save_mrc_with_origin(synthetic_density.T, out_syn_mrc, TARGET_VOXEL_SIZE, phys_origin)
 
     except Exception as e:
         print(f"Error processing {pdb_id}: {e}")
-        import traceback
-        traceback.print_exc()
+        # import traceback
+        # traceback.print_exc()
 
 # ----------------------------
 # MAIN EXECUTION
@@ -256,7 +205,6 @@ if __name__ == "__main__":
     tasks = []
     print("Scanning PDBs for ligand instances...")
     
-    # We iterate through metadata and PRE-SCAN PDBs to find all ligand instances
     for pdb_id, ccds, smiles in zip(metadata["pdb_ids"], metadata["ligand_names"], metadata["ligand_smiles"]):
         pdb_dir = RAW_DATA_DIR / pdb_id.lower()
         if not pdb_dir.exists(): continue
@@ -265,15 +213,11 @@ if __name__ == "__main__":
         
         if not glob.glob(os.path.join(pdb_dir, "EMD-*.map.gz")): continue
         
-        # --- NEW LOGIC: OPEN PDB TO COUNT INSTANCES ---
         try:
             parser = PDBParser(QUIET=True)
-            # Just parsing to count ligands
             s = parser.get_structure("temp", pdb_files[0])
             target_ccd = ccds[0]
             
-            # Find all residues matching the CCD
-            # Note: We relax the check to include HETATM/ATOM as long as resname matches
             lig_instances = [r for r in s.get_residues() if r.resname == target_ccd]
             count = len(lig_instances)
             
@@ -283,7 +227,6 @@ if __name__ == "__main__":
             
             print(f"  [Add]  {pdb_id}: Found {count} instances of {target_ccd}")
 
-            # Create a task for EACH instance (1-based index)
             for i in range(1, count + 1):
                 tasks.append((str(pdb_dir), pdb_files[0], pdb_id, target_ccd, smiles[0], i))
 
@@ -303,6 +246,7 @@ if __name__ == "__main__":
         h5.create_dataset("ligand_smiles", (N,), dtype=h5py.string_dtype())
         h5.create_dataset("centroids", (N, 3), dtype="float32")
         h5.create_dataset("crop_start_voxel", (N, 3), dtype="int32")
+        h5.create_dataset("physical_origin", (N, 3), dtype="float32")
 
         print(f"Starting Processing (Output -> {PROCESSED_DIR})...")
         thread_map(

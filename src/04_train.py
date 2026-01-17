@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, Dataset, random_split, Subset
+from torch.utils.data import DataLoader, Dataset, random_split
 import h5py
 import numpy as np
 import rdkit.Chem as Chem
@@ -10,173 +10,37 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import os
 import random
-import mrcfile  # Required for exporting 3D files
+import sys
 
-# Custom Imports
+# --- IMPORT CUSTOM MODULES ---
+sys.path.append(str(Path(__file__).resolve().parent))
 from architecture import SCUNet, CustomLoss
+from utils_common import save_mrc_with_origin
 
-# --- CONFIG ---
-HDF5_FILE = Path(__file__).resolve().parent.parent / "data" / "processed" / "ml_dataset.h5"
-CHECKPOINT_DIR = Path(__file__).resolve().parent.parent / "checkpoints"
-PLOT_DIR = Path(__file__).resolve().parent.parent / "plots"
-RESULTS_DIR = Path(__file__).resolve().parent.parent / "results" / "mrc_visuals"
+# --- CONFIGURATION ---
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+DATA_DIR = PROJECT_ROOT / "data" / "processed"
+CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints"
+PLOT_DIR = PROJECT_ROOT / "plots"
+RESULTS_DIR = PROJECT_ROOT / "results"
 
+HDF5_FILE = DATA_DIR / "ml_dataset.h5"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+# Hyperparameters
 EPOCHS = 100
 BATCH_SIZE = 2
 LR = 1e-4
+LIGAND_DIM = 1024
+VOXEL_SIZE = 0.5 
 
 # Ensure directories exist
-CHECKPOINT_DIR.mkdir(exist_ok=True, parents=True)
-PLOT_DIR.mkdir(exist_ok=True, parents=True)
-RESULTS_DIR.mkdir(exist_ok=True, parents=True)
+CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+PLOT_DIR.mkdir(parents=True, exist_ok=True)
+RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-
-# ----------------------------
-# HELPER: METRICS & VISUALIZATION
-# ----------------------------
-def get_grad_norm(model):
-    """Calculates the global norm of gradients to monitor stability."""
-    total_norm = 0
-    for p in model.parameters():
-        if p.grad is not None:
-            param_norm = p.grad.data.norm(2)
-            total_norm += param_norm.item() ** 2
-    return total_norm ** 0.5
-
-def save_visual_check(model, dataset, epoch, device):
-    """Saves a 2D slice visual comparison (Input vs Pred vs Target)."""
-    model.eval()
-    # Always pick sample 0 from the FULL dataset for consistency
-    inputs, lig_emb, target = dataset[0]
-    
-    inputs = inputs.unsqueeze(0).to(device)
-    lig_emb = lig_emb.unsqueeze(0).to(device)
-    
-    with torch.no_grad():
-        pred = model(inputs, lig_emb)
-    
-    z_slice = inputs.shape[2] // 2
-    
-    img_input = inputs[0, 0, :, :, z_slice].cpu().numpy()
-    img_mask  = inputs[0, 1, :, :, z_slice].cpu().numpy()
-    img_pred  = pred[0, 0, :, :, z_slice].cpu().numpy()
-    img_true  = target[0, :, :, z_slice].cpu().numpy()
-
-    fig, axes = plt.subplots(1, 4, figsize=(20, 5))
-    axes[0].imshow(img_input, cmap="gray"); axes[0].set_title("Input Density")
-    axes[1].imshow(img_mask, cmap="Blues", alpha=0.7); axes[1].set_title("Protein Mask")
-    axes[2].imshow(img_pred, cmap="magma"); axes[2].set_title(f"Prediction (Epoch {epoch})")
-    axes[3].imshow(img_true, cmap="magma"); axes[3].set_title("Ground Truth")
-    
-    plt.tight_layout()
-    plt.savefig(PLOT_DIR / f"visual_epoch_{epoch:03d}.png")
-    plt.close()
-
-def plot_metrics(history, save_path):
-    """Plots Loss, LR, Gradient Norm, and Masked MSE."""
-    epochs = range(1, len(history['train_loss']) + 1)
-    
-    fig, axs = plt.subplots(2, 2, figsize=(12, 10))
-    
-    # 1. Global Loss
-    axs[0, 0].plot(epochs, history['train_loss'], label='Train Loss')
-    axs[0, 0].plot(epochs, history['val_loss'], label='Val Loss')
-    axs[0, 0].set_title('Global Loss (MSE + SSIM)')
-    axs[0, 0].legend()
-    axs[0, 0].grid(True)
-
-    # 2. Masked MSE
-    axs[0, 1].plot(epochs, history['masked_mse'], color='red')
-    axs[0, 1].set_title('Masked MSE (Error INSIDE Pocket)')
-    axs[0, 1].set_yscale('log')
-    axs[0, 1].grid(True)
-
-    # 3. Gradient Norm
-    axs[1, 0].plot(epochs, history['grad_norm'], color='green')
-    axs[1, 0].set_title('Gradient Norm (Stability)')
-    axs[1, 0].set_yscale('log') 
-    axs[1, 0].grid(True)
-
-    # 4. Learning Rate
-    axs[1, 1].plot(epochs, history['lr'], color='orange')
-    axs[1, 1].set_title('Learning Rate')
-    axs[1, 1].grid(True)
-
-    plt.tight_layout()
-    plt.savefig(save_path)
-    plt.close()
-
-# ----------------------------
-# HELPER: 3D EXPORT (NEW)
-# ----------------------------
-def save_mrc_samples(model, subset, set_name, device, num_samples=5):
-    """
-    Randomly selects samples from a Train/Val Subset, runs inference,
-    and saves the Input, Prediction, and Ground Truth as .mrc files.
-    """
-    model.eval()
-    output_dir = RESULTS_DIR / set_name
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # subset is a torch.utils.data.Subset
-    # subset.indices gives the indices in the ORIGINAL dataset
-    indices_to_sample = random.sample(subset.indices, min(num_samples, len(subset)))
-    
-    # Access the original dataset logic to get metadata (PDB ID, SMILES)
-    # We open the H5 file freshly here to avoid pickling issues
-    with h5py.File(HDF5_FILE, 'r') as f:
-        print(f"--- Exporting {len(indices_to_sample)} {set_name} samples to {output_dir} ---")
-        
-        for idx in indices_to_sample:
-            # 1. Load Data
-            exp_density = f['exp_density'][idx] # (96,96,96)
-            protein_mask = f['maps'][idx][0]
-            ground_truth = f['ground_truth_maps'][idx]
-            pdb_id = f['pdb_ids'][idx].decode('utf-8')
-            smiles = f['ligand_smiles'][idx].decode('utf-8')
-
-            # 2. Prepare Inputs
-            input_numpy = np.stack([exp_density, protein_mask], axis=0)
-            input_tensor = torch.from_numpy(input_numpy).unsqueeze(0).float().to(device)
-            
-            # Generate Fingerprint (reusing logic essentially)
-            try:
-                mol = Chem.MolFromSmiles(smiles)
-                fp = AllChem.GetMorganFingerprintAsBitVect(mol, 2, nBits=1024)
-                fp_arr = np.array(fp, dtype=np.float32)
-                lig_emb = torch.from_numpy(fp_arr).unsqueeze(0).float().to(device)
-            except:
-                lig_emb = torch.zeros(1, 1024).float().to(device)
-
-            # 3. Inference
-            with torch.no_grad():
-                pred_tensor = model(input_tensor, lig_emb)
-            
-            # 4. Save .mrc Files
-            base_name = f"{set_name}_{pdb_id}"
-            
-            # Save Input
-            with mrcfile.new(output_dir / f"{base_name}_input.mrc", overwrite=True) as mrc:
-                mrc.set_data(exp_density.astype(np.float32))
-                mrc.voxel_size = 1.0
-            
-            # Save Prediction
-            with mrcfile.new(output_dir / f"{base_name}_pred.mrc", overwrite=True) as mrc:
-                mrc.set_data(pred_tensor.cpu().numpy().squeeze().astype(np.float32))
-                mrc.voxel_size = 1.0
-                
-            # Save Ground Truth
-            with mrcfile.new(output_dir / f"{base_name}_gt.mrc", overwrite=True) as mrc:
-                mrc.set_data(ground_truth.astype(np.float32))
-                mrc.voxel_size = 1.0
-            
-            print(f"   Saved {base_name}")
-
-
-# ----------------------------
-# DATASET CLASS
-# ----------------------------
+# --- DATASET CLASS ---
 class CryoEMDataset(Dataset):
     def __init__(self, h5_path, ligand_dim=1024):
         self.h5_path = h5_path
@@ -193,9 +57,8 @@ class CryoEMDataset(Dataset):
             if mol is None:
                 return torch.zeros(self.ligand_dim, dtype=torch.float32)
             fp = AllChem.GetMorganFingerprintAsBitVect(mol, 2, nBits=self.ligand_dim)
-            arr = np.array(fp, dtype=np.float32)
-            return torch.from_numpy(arr)
-        except Exception:
+            return torch.from_numpy(np.array(fp, dtype=np.float32))
+        except:
             return torch.zeros(self.ligand_dim, dtype=torch.float32)
 
     def __len__(self):
@@ -209,9 +72,8 @@ class CryoEMDataset(Dataset):
         protein_mask = self.h5_file['maps'][idx][0]
         
         input_tensor = np.stack([exp_density, protein_mask], axis=0)
-        
         target = self.h5_file['ground_truth_maps'][idx]
-        target = np.expand_dims(target, axis=0) 
+        target = np.expand_dims(target, axis=0)
 
         smiles = self.h5_file['ligand_smiles'][idx]
         ligand_emb = self._get_fingerprint(smiles)
@@ -222,52 +84,148 @@ class CryoEMDataset(Dataset):
             torch.from_numpy(target).float()
         )
 
+# --- HELPER: METRICS PLOTTING ---
+def plot_metrics(history, save_path):
+    epochs = range(1, len(history['train_loss']) + 1)
+    fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+    
+    axs[0, 0].plot(epochs, history['train_loss'], label='Train')
+    axs[0, 0].plot(epochs, history['val_loss'], label='Val')
+    axs[0, 0].set_title('Loss (MSE + SSIM)')
+    axs[0, 0].legend()
+    
+    axs[0, 1].plot(epochs, history['masked_mse'], 'r')
+    axs[0, 1].set_title('Masked MSE (Error inside pocket)')
+    axs[0, 1].set_yscale('log')
+    
+    axs[1, 0].plot(epochs, history['grad_norm'], 'g')
+    axs[1, 0].set_title('Gradient Norm')
+    
+    axs[1, 1].plot(epochs, history['lr'], 'orange')
+    axs[1, 1].set_title('Learning Rate')
+    
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
 
-# ----------------------------
-# TRAINING LOOP
-# ----------------------------
+# --- HELPER: 3D VISUALIZATION EXPORT ---
+def save_mrc_samples(model, subset, folder_name, device, num_samples=5):
+    """
+    Exports aligned .mrc files.
+    CRITICAL: Uses .T (transpose) and requires 'physical_origin' from HDF5.
+    """
+    model.eval()
+    output_dir = RESULTS_DIR / folder_name
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    n_samples = min(num_samples, len(subset))
+    if n_samples == 0: return
+
+    indices = random.sample(subset.indices, n_samples)
+    
+    with h5py.File(HDF5_FILE, 'r') as f:
+        print(f"--- Exporting {len(indices)} samples to {output_dir} ---")
+        
+        # STRICT CHECK: Dataset must have origin data
+        if 'physical_origin' not in f:
+            raise KeyError(
+                "CRITICAL ERROR: 'physical_origin' missing from HDF5 file.\n"
+                "You MUST re-run 'src/01_generate_dataset.py' to generate the alignment coordinates."
+            )
+
+        for idx in indices:
+            exp_density = f['exp_density'][idx]
+            protein_mask = f['maps'][idx][0]
+            ground_truth = f['ground_truth_maps'][idx]
+            phys_origin = f['physical_origin'][idx]  # <-- The alignment vector
+            pdb_id = f['pdb_ids'][idx].decode('utf-8')
+            smiles = f['ligand_smiles'][idx].decode('utf-8')
+            
+            # Prepare Input
+            input_np = np.stack([exp_density, protein_mask], axis=0)
+            input_tensor = torch.from_numpy(input_np).unsqueeze(0).float().to(device)
+            
+            try:
+                mol = Chem.MolFromSmiles(smiles)
+                fp = AllChem.GetMorganFingerprintAsBitVect(mol, 2, nBits=LIGAND_DIM)
+                lig_emb = torch.from_numpy(np.array(fp, dtype=np.float32)).unsqueeze(0).float().to(device)
+            except:
+                lig_emb = torch.zeros(1, LIGAND_DIM).float().to(device)
+
+            # Inference
+            with torch.no_grad():
+                pred_tensor = model(input_tensor, lig_emb)
+            
+            pred_np = pred_tensor.cpu().numpy().squeeze()
+            
+            # --- SAVE FILES WITH TRANSPOSE (.T) AND ORIGIN ---
+            base_name = f"{pdb_id}"
+            
+            # 1. Prediction (Apply .T)
+            save_mrc_with_origin(
+                pred_np.T, 
+                output_dir / f"{base_name}_pred.mrc", 
+                VOXEL_SIZE, 
+                phys_origin
+            )
+            
+            # 2. Ground Truth (Apply .T)
+            save_mrc_with_origin(
+                ground_truth.T, 
+                output_dir / f"{base_name}_gt.mrc", 
+                VOXEL_SIZE, 
+                phys_origin
+            )
+            
+            # 3. Input (Apply .T)
+            save_mrc_with_origin(
+                exp_density.T, 
+                output_dir / f"{base_name}_input.mrc", 
+                VOXEL_SIZE, 
+                phys_origin
+            )
+            
+            print(f"   Saved {base_name} | Origin: {phys_origin}")
+
+# --- MAIN TRAINING LOOP ---
 def main():
-    print(f"--- Training on {DEVICE} ---")
+    print(f"--- Initializing Training on {DEVICE} ---")
     
     if not HDF5_FILE.exists():
         raise FileNotFoundError(f"Dataset not found at {HDF5_FILE}")
-
-    dataset = CryoEMDataset(HDF5_FILE)
+        
+    full_dataset = CryoEMDataset(HDF5_FILE, ligand_dim=LIGAND_DIM)
     
-    # Split
-    train_size = int(0.9 * len(dataset))
-    val_size = len(dataset) - train_size
-    train_data, val_data = random_split(dataset, [train_size, val_size])
+    train_size = int(0.9 * len(full_dataset))
+    val_size = len(full_dataset) - train_size
+    train_data, val_data = random_split(full_dataset, [train_size, val_size])
     
-    print(f"Train samples: {len(train_data)} | Val samples: {len(val_data)}")
-
+    print(f"Dataset: {len(full_dataset)} | Train: {len(train_data)} | Val: {len(val_data)}")
+    
     train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
     val_loader = DataLoader(val_data, batch_size=BATCH_SIZE, shuffle=False, num_workers=4, pin_memory=True)
-
-    model = SCUNet(in_nc=2, ligand_dim=1024).to(DEVICE)
+    
+    model = SCUNet(in_nc=2, ligand_dim=LIGAND_DIM).to(DEVICE)
     optimizer = optim.AdamW(model.parameters(), lr=LR)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
-
+    
     try:
-        criterion = CustomLoss()
-    except NameError:
-        print("CustomLoss not found, using MSELoss.")
-        criterion = nn.MSELoss()
+        criterion = CustomLoss().to(DEVICE)
+        print("Using CustomLoss")
+    except:
+        criterion = nn.MSELoss().to(DEVICE)
+        print("Using MSELoss")
 
-    history = {
-        'train_loss': [], 'val_loss': [], 
-        'lr': [], 'grad_norm': [], 'masked_mse': []
-    }
-
+    history = {'train_loss': [], 'val_loss': [], 'lr': [], 'grad_norm': [], 'masked_mse': []}
     best_loss = float('inf')
-
-    print("--- Starting Training ---")
+    
+    print("\n--- Starting Epochs ---")
     try:
         for epoch in range(EPOCHS):
-            # === TRAIN ===
+            # --- TRAIN ---
             model.train()
-            t_loss = 0
-            total_grad_norm = 0
+            train_loss_accum = 0
+            grad_norm_accum = 0
             
             for inputs, lig_emb, targets in train_loader:
                 inputs, lig_emb, targets = inputs.to(DEVICE), lig_emb.to(DEVICE), targets.to(DEVICE)
@@ -277,87 +235,71 @@ def main():
                 loss = criterion(preds, targets)
                 loss.backward()
                 
-                grad_norm = get_grad_norm(model)
-                total_grad_norm += grad_norm
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                total_norm = 0
+                for p in model.parameters():
+                    if p.grad is not None:
+                        total_norm += p.grad.data.norm(2).item() ** 2
+                grad_norm_accum += (total_norm ** 0.5)
                 
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
-                t_loss += loss.item()
+                train_loss_accum += loss.item()
 
-            # === VALIDATION ===
+            # --- VALIDATION ---
             model.eval()
-            v_loss = 0
-            total_masked_mse = 0
+            val_loss_accum = 0
+            masked_mse_accum = 0
             
             with torch.no_grad():
                 for inputs, lig_emb, targets in val_loader:
                     inputs, lig_emb, targets = inputs.to(DEVICE), lig_emb.to(DEVICE), targets.to(DEVICE)
                     preds = model(inputs, lig_emb)
+                    val_loss_accum += criterion(preds, targets).item()
                     
-                    v_loss += criterion(preds, targets).item()
-                    
-                    # MASKED MSE
-                    mask = inputs[:, 1:2, :, :, :] 
-                    active_region = mask > 0.1
-                    squared_diff = (preds - targets) ** 2
-                    
-                    if active_region.sum() > 0:
-                        masked_mse = squared_diff[active_region].mean().item()
+                    roi_mask = (targets > 0.05)
+                    if roi_mask.sum() > 0:
+                        masked_mse = ((preds - targets)**2)[roi_mask].mean().item()
                     else:
-                        masked_mse = squared_diff.mean().item()
-                    
-                    total_masked_mse += masked_mse
+                        masked_mse = ((preds - targets)**2).mean().item()
+                    masked_mse_accum += masked_mse
 
-            # === AVERAGES & LOGGING ===
-            avg_t = t_loss / len(train_loader)
-            avg_v = v_loss / len(val_loader)
-            avg_grad = total_grad_norm / len(train_loader)
-            avg_masked = total_masked_mse / len(val_loader)
-            current_lr = optimizer.param_groups[0]['lr']
+            # --- LOGGING ---
+            avg_train_loss = train_loss_accum / len(train_loader)
+            avg_val_loss = val_loss_accum / len(val_loader)
+            avg_grad_norm = grad_norm_accum / len(train_loader)
+            avg_masked_mse = masked_mse_accum / len(val_loader)
             
-            scheduler.step(avg_v)
+            history['train_loss'].append(avg_train_loss)
+            history['val_loss'].append(avg_val_loss)
+            history['grad_norm'].append(avg_grad_norm)
+            history['masked_mse'].append(avg_masked_mse)
+            history['lr'].append(optimizer.param_groups[0]['lr'])
             
-            history['train_loss'].append(avg_t)
-            history['val_loss'].append(avg_v)
-            history['lr'].append(current_lr)
-            history['grad_norm'].append(avg_grad)
-            history['masked_mse'].append(avg_masked)
-
-            print(f"Epoch {epoch+1:03d} | Val Loss: {avg_v:.5f} | Masked MSE: {avg_masked:.5f} | Grad: {avg_grad:.2f}")
+            scheduler.step(avg_val_loss)
             
-            plot_metrics(history, save_path=PLOT_DIR / "training_metrics.png")
+            print(f"Epoch {epoch+1:03d} | Train: {avg_train_loss:.4f} | Val: {avg_val_loss:.4f} | Pocket Err: {avg_masked_mse:.4f}")
             
-            # Save visual check every epoch
-            save_visual_check(model, dataset, epoch + 1, DEVICE)
-
-            if avg_v < best_loss:
-                best_loss = avg_v
+            if avg_val_loss < best_loss:
+                best_loss = avg_val_loss
                 torch.save(model.state_dict(), CHECKPOINT_DIR / "best_model.pth")
-                print(f"  --> Best Model Saved")
-
-            torch.save(model.state_dict(), CHECKPOINT_DIR / "latest_checkpoint.pth")
+            
+            if (epoch + 1) % 10 == 0:
+                plot_metrics(history, PLOT_DIR / "training_metrics.png")
 
     except KeyboardInterrupt:
-        print("\nTraining interrupted by user. Proceeding to 3D Export...")
+        print("\nStopped manually.")
 
-    # --- 3D EXPORT STEP (Runs after training finishes) ---
-    print("\n==================================================")
-    print("TRAINING FINISHED. EXPORTING 3D SAMPLES FOR CHECKING")
-    print("==================================================")
-    
-    # Load the best model to ensure we export the best results
-    print("Loading Best Model for Export...")
+    # --- EXPORT FINAL VISUALS ---
+    print("\n--- Exporting Verification Samples ---")
     best_path = CHECKPOINT_DIR / "best_model.pth"
     if best_path.exists():
         model.load_state_dict(torch.load(best_path, map_location=DEVICE))
     
-    # Save 5 samples from TRAIN set
-    save_mrc_samples(model, train_data, "train", DEVICE, num_samples=5)
+    # Updated Folder Names
+    save_mrc_samples(model, train_data, "predictions_train", DEVICE)
+    save_mrc_samples(model, val_data, "predictions_val", DEVICE)
     
-    # Save 5 samples from VAL set
-    save_mrc_samples(model, val_data, "val", DEVICE, num_samples=5)
-    
-    print("\nDone! Check 'results/mrc_visuals/' for 3D files.")
+    print(f"Done. Check {RESULTS_DIR}/predictions_val for aligned results.")
 
 if __name__ == "__main__":
     main()
