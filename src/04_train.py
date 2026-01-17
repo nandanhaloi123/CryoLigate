@@ -14,8 +14,8 @@ import sys
 
 # --- IMPORT CUSTOM MODULES ---
 sys.path.append(str(Path(__file__).resolve().parent))
-from architecture import SCUNet               # <--- Imported from architecture.py
-from loss import WeightedMSELoss              # <--- Imported from loss.py
+from architecture import SCUNet               
+from loss import EMReadyLikeLoss              # <--- CHANGED IMPORT
 from utils_common import save_mrc_with_origin
 
 # --- CONFIGURATION ---
@@ -32,17 +32,20 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # --- HYPERPARAMETERS ---
 BATCH_SIZE = 8
 EPOCHS = 100
-LR = 1e-4
+LR = 2e-4             # Good starting point for Smooth L1
 LIGAND_DIM = 1024
 VOXEL_SIZE = 0.5 
-LIGAND_WEIGHT = 50.0  # <--- The penalty multiplier for ligand errors
+
+# --- LOSS CONFIGURATION ---
+LIGAND_WEIGHT = 500.0  # High penalty for missing the ligand
+SSIM_WEIGHT = 0.2      # Small weight for SSIM to start (Paper uses sum, but we balance it)
 
 # Ensure directories exist
 CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
 PLOT_DIR.mkdir(parents=True, exist_ok=True)
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-# --- DATASET CLASS (Updated to return Mask) ---
+# --- DATASET CLASS ---
 class CryoEMDataset(Dataset):
     def __init__(self, h5_path, ligand_dim=1024):
         self.h5_path = h5_path
@@ -88,7 +91,7 @@ class CryoEMDataset(Dataset):
             torch.from_numpy(input_tensor).float(), 
             ligand_emb.float(), 
             torch.from_numpy(target).float(),
-            torch.from_numpy(lig_mask).float()  # <--- Returning mask
+            torch.from_numpy(lig_mask).float() 
         )
 
 # --- HELPER: PLOTTING ---
@@ -98,7 +101,7 @@ def plot_metrics(history, save_path):
     
     axs[0, 0].plot(epochs, history['train_loss'], label='Train')
     axs[0, 0].plot(epochs, history['val_loss'], label='Val')
-    axs[0, 0].set_title(f'Weighted Loss (Factor={LIGAND_WEIGHT})')
+    axs[0, 0].set_title(f'Total Loss (SmoothL1 + SSIM)')
     axs[0, 0].legend()
     axs[0, 0].set_yscale('log')
     
@@ -179,9 +182,13 @@ def main():
     optimizer = optim.AdamW(model.parameters(), lr=LR)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
     
-    # --- NEW LOSS ---
-    criterion = WeightedMSELoss(ligand_weight=LIGAND_WEIGHT).to(DEVICE)
-    print(f"Using WeightedMSELoss (Ligand Penalty: {LIGAND_WEIGHT}x)")
+    # --- EMREADY-STYLE LOSS ---
+    criterion = EMReadyLikeLoss(
+        ligand_weight=LIGAND_WEIGHT, 
+        ssim_weight=SSIM_WEIGHT
+    ).to(DEVICE)
+    
+    print(f"Loss Config: SmoothL1 (Weight={LIGAND_WEIGHT}) + SSIM (Weight={SSIM_WEIGHT})")
 
     history = {'train_loss': [], 'val_loss': [], 'lr': [], 'grad_norm': [], 'masked_mse': []}
     best_loss = float('inf')
@@ -193,17 +200,16 @@ def main():
             train_loss_accum = 0
             grad_norm_accum = 0
             
-            # Unpack 4 items now (Mask added)
             for inputs, lig_emb, targets, lig_masks in train_loader:
                 inputs = inputs.to(DEVICE)
                 lig_emb = lig_emb.to(DEVICE)
                 targets = targets.to(DEVICE)
-                lig_masks = lig_masks.to(DEVICE) # <--- To Device
+                lig_masks = lig_masks.to(DEVICE)
                 
                 optimizer.zero_grad()
                 preds = model(inputs, lig_emb)
                 
-                # Pass mask to loss
+                # Forward pass through new loss
                 loss = criterion(preds, targets, lig_masks) 
                 loss.backward()
                 
@@ -229,7 +235,7 @@ def main():
                     
                     val_loss_accum += criterion(preds, targets, lig_masks).item()
                     
-                    # Calculate Pure Masked MSE (for plotting only)
+                    # Monitor: Pure MSE inside the mask
                     roi_mask = (lig_masks > 0.5)
                     if roi_mask.sum() > 0:
                         masked_mse = ((preds - targets)**2)[roi_mask].mean().item()
