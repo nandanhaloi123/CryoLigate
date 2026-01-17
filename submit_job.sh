@@ -12,4 +12,4 @@
 # queue
 #SBATCH -p lindahl4
 
-python src/04_train.py 
+python src/01_fetch_metadata.py 

@@ -48,8 +48,8 @@ def main():
     exclude = ['NAG', 'LPC', 'BMA', 'MAN', 'ZN', 'MG', 'HOH', 'SO4']
     filtered_df = df[
         (~df['ligand_is_covalent']) &
-        (df['entry_oligomeric_state'] == 'monomeric') &
-        (df['ligand_qed'] >= 0.7) &
+        # (df['entry_oligomeric_state'] == 'monomeric') &
+        # (df['ligand_qed'] >= 0.7) &
         (df['entry_determination_method'] == 'ELECTRON MICROSCOPY') &
         (~df['ligand_ccd_code'].isin(exclude))
     ].copy()
