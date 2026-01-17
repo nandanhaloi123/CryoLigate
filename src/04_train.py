@@ -28,9 +28,10 @@ RESULTS_DIR = PROJECT_ROOT / "results"
 HDF5_FILE = DATA_DIR / "ml_dataset.h5"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Hyperparameters
+# --- HYPERPARAMETERS ---
+# Increased Batch Size for Multi-GPU (e.g., 4 GPUs = 2 samples per GPU)
+BATCH_SIZE = 8  
 EPOCHS = 100
-BATCH_SIZE = 2
 LR = 1e-4
 LIGAND_DIM = 1024
 VOXEL_SIZE = 0.5 
@@ -112,7 +113,6 @@ def plot_metrics(history, save_path):
 def save_mrc_samples(model, subset, folder_name, device, num_samples=5):
     """
     Exports aligned .mrc files.
-    CRITICAL: Uses .T (transpose) and requires 'physical_origin' from HDF5.
     """
     model.eval()
     output_dir = RESULTS_DIR / folder_name
@@ -126,22 +126,17 @@ def save_mrc_samples(model, subset, folder_name, device, num_samples=5):
     with h5py.File(HDF5_FILE, 'r') as f:
         print(f"--- Exporting {len(indices)} samples to {output_dir} ---")
         
-        # STRICT CHECK: Dataset must have origin data
         if 'physical_origin' not in f:
-            raise KeyError(
-                "CRITICAL ERROR: 'physical_origin' missing from HDF5 file.\n"
-                "You MUST re-run 'src/01_generate_dataset.py' to generate the alignment coordinates."
-            )
+            raise KeyError("CRITICAL ERROR: 'physical_origin' missing. Re-run data generation.")
 
         for idx in indices:
             exp_density = f['exp_density'][idx]
             protein_mask = f['maps'][idx][0]
             ground_truth = f['ground_truth_maps'][idx]
-            phys_origin = f['physical_origin'][idx]  # <-- The alignment vector
+            phys_origin = f['physical_origin'][idx]
             pdb_id = f['pdb_ids'][idx].decode('utf-8')
             smiles = f['ligand_smiles'][idx].decode('utf-8')
             
-            # Prepare Input
             input_np = np.stack([exp_density, protein_mask], axis=0)
             input_tensor = torch.from_numpy(input_np).unsqueeze(0).float().to(device)
             
@@ -152,44 +147,26 @@ def save_mrc_samples(model, subset, folder_name, device, num_samples=5):
             except:
                 lig_emb = torch.zeros(1, LIGAND_DIM).float().to(device)
 
-            # Inference
             with torch.no_grad():
                 pred_tensor = model(input_tensor, lig_emb)
             
             pred_np = pred_tensor.cpu().numpy().squeeze()
-            
-            # --- SAVE FILES WITH TRANSPOSE (.T) AND ORIGIN ---
             base_name = f"{pdb_id}"
             
-            # 1. Prediction (Apply .T)
-            save_mrc_with_origin(
-                pred_np.T, 
-                output_dir / f"{base_name}_pred.mrc", 
-                VOXEL_SIZE, 
-                phys_origin
-            )
+            # Save files (.T transposed for ChimeraX)
+            save_mrc_with_origin(pred_np.T, output_dir / f"{base_name}_pred.mrc", VOXEL_SIZE, phys_origin)
+            save_mrc_with_origin(ground_truth.T, output_dir / f"{base_name}_gt.mrc", VOXEL_SIZE, phys_origin)
+            save_mrc_with_origin(exp_density.T, output_dir / f"{base_name}_input.mrc", VOXEL_SIZE, phys_origin)
             
-            # 2. Ground Truth (Apply .T)
-            save_mrc_with_origin(
-                ground_truth.T, 
-                output_dir / f"{base_name}_gt.mrc", 
-                VOXEL_SIZE, 
-                phys_origin
-            )
-            
-            # 3. Input (Apply .T)
-            save_mrc_with_origin(
-                exp_density.T, 
-                output_dir / f"{base_name}_input.mrc", 
-                VOXEL_SIZE, 
-                phys_origin
-            )
-            
-            print(f"   Saved {base_name} | Origin: {phys_origin}")
+            print(f"   Saved {base_name}")
 
 # --- MAIN TRAINING LOOP ---
 def main():
     print(f"--- Initializing Training on {DEVICE} ---")
+    
+    # 1. GPU Check
+    gpu_count = torch.cuda.device_count()
+    print(f"Available GPUs: {gpu_count}")
     
     if not HDF5_FILE.exists():
         raise FileNotFoundError(f"Dataset not found at {HDF5_FILE}")
@@ -200,12 +177,18 @@ def main():
     val_size = len(full_dataset) - train_size
     train_data, val_data = random_split(full_dataset, [train_size, val_size])
     
-    print(f"Dataset: {len(full_dataset)} | Train: {len(train_data)} | Val: {len(val_data)}")
+    # Increase num_workers for faster data loading
+    train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, num_workers=8, pin_memory=True)
+    val_loader = DataLoader(val_data, batch_size=BATCH_SIZE, shuffle=False, num_workers=8, pin_memory=True)
     
-    train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
-    val_loader = DataLoader(val_data, batch_size=BATCH_SIZE, shuffle=False, num_workers=4, pin_memory=True)
-    
+    # 2. Model Setup
     model = SCUNet(in_nc=2, ligand_dim=LIGAND_DIM).to(DEVICE)
+    
+    # --- MULTI-GPU WRAPPER ---
+    if gpu_count > 1:
+        print(f"--> Wrapping model with DataParallel on {gpu_count} GPUs")
+        model = nn.DataParallel(model)
+    
     optimizer = optim.AdamW(model.parameters(), lr=LR)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
     
@@ -222,7 +205,6 @@ def main():
     print("\n--- Starting Epochs ---")
     try:
         for epoch in range(EPOCHS):
-            # --- TRAIN ---
             model.train()
             train_loss_accum = 0
             grad_norm_accum = 0
@@ -235,6 +217,7 @@ def main():
                 loss = criterion(preds, targets)
                 loss.backward()
                 
+                # Grad Norm (handle DataParallel parameters)
                 total_norm = 0
                 for p in model.parameters():
                     if p.grad is not None:
@@ -263,15 +246,13 @@ def main():
                         masked_mse = ((preds - targets)**2).mean().item()
                     masked_mse_accum += masked_mse
 
-            # --- LOGGING ---
             avg_train_loss = train_loss_accum / len(train_loader)
             avg_val_loss = val_loss_accum / len(val_loader)
-            avg_grad_norm = grad_norm_accum / len(train_loader)
             avg_masked_mse = masked_mse_accum / len(val_loader)
             
             history['train_loss'].append(avg_train_loss)
             history['val_loss'].append(avg_val_loss)
-            history['grad_norm'].append(avg_grad_norm)
+            history['grad_norm'].append(grad_norm_accum / len(train_loader))
             history['masked_mse'].append(avg_masked_mse)
             history['lr'].append(optimizer.param_groups[0]['lr'])
             
@@ -279,9 +260,12 @@ def main():
             
             print(f"Epoch {epoch+1:03d} | Train: {avg_train_loss:.4f} | Val: {avg_val_loss:.4f} | Pocket Err: {avg_masked_mse:.4f}")
             
+            # --- SAFE SAVING (Unwrap DataParallel) ---
             if avg_val_loss < best_loss:
                 best_loss = avg_val_loss
-                torch.save(model.state_dict(), CHECKPOINT_DIR / "best_model.pth")
+                # If wrapped, access .module to save clean weights
+                state_dict = model.module.state_dict() if isinstance(model, nn.DataParallel) else model.state_dict()
+                torch.save(state_dict, CHECKPOINT_DIR / "best_model.pth")
             
             if (epoch + 1) % 10 == 0:
                 plot_metrics(history, PLOT_DIR / "training_metrics.png")
@@ -289,13 +273,18 @@ def main():
     except KeyboardInterrupt:
         print("\nStopped manually.")
 
-    # --- EXPORT FINAL VISUALS ---
+    # --- EXPORT ---
     print("\n--- Exporting Verification Samples ---")
     best_path = CHECKPOINT_DIR / "best_model.pth"
     if best_path.exists():
-        model.load_state_dict(torch.load(best_path, map_location=DEVICE))
+        # Load weights into unwrapped model or wrapped model?
+        # Best approach: load into wrapped model for inference consistency
+        state_dict = torch.load(best_path, map_location=DEVICE)
+        if isinstance(model, nn.DataParallel):
+            model.module.load_state_dict(state_dict)
+        else:
+            model.load_state_dict(state_dict)
     
-    # Updated Folder Names
     save_mrc_samples(model, train_data, "predictions_train", DEVICE)
     save_mrc_samples(model, val_data, "predictions_val", DEVICE)
     
