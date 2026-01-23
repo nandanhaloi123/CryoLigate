@@ -12,4 +12,4 @@
 # queue
 #SBATCH -p lindahl4
 
-python src/01_fetch_metadata.py 
+python src/02_download_raw_data.py

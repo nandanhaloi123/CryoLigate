@@ -6,7 +6,21 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm 
 import matplotlib.pyplot as plt
+import seaborn as sns
+from collections import Counter
 
+# --- CHEMICAL INTELLIGENCE ---
+try:
+    from rdkit import Chem
+    from rdkit.Chem import Descriptors, rdMolDescriptors
+    RDKIT_AVAILABLE = True
+except ImportError:
+    print("WARNING: RDKit not found. Classification will be limited.")
+    RDKIT_AVAILABLE = False
+
+# ----------------------------
+# CONFIGURATION
+# ----------------------------
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 
@@ -14,261 +28,313 @@ DATA_DIR = PROJECT_ROOT / "data" / "metadata"
 OUTPUT_XLSX = DATA_DIR / "pdb_em_metadata_balanced.xlsx"
 OUTPUT_NPZ = DATA_DIR / "pdb_em_metadata_balanced.npz"
 
-# Plot Outputs
-LIGAND_PLOT_OUTPUT = DATA_DIR / "ligand_diversity_balanced.png"
-OLIGO_PLOT_OUTPUT = DATA_DIR / "oligomer_state_distribution.png" # <--- NEW PLOT
-STATS_OUTPUT = DATA_DIR / "ligand_stats_balanced.csv"
+# Plots
+PIE_CHART_BEFORE = DATA_DIR / "ligand_class_distribution_BEFORE.png"
+PIE_CHART_AFTER = DATA_DIR / "ligand_class_distribution_AFTER.png"
+LIGAND_PLOT_BEFORE = DATA_DIR / "ligand_diversity_plot.png"
+LIGAND_PLOT_AFTER = DATA_DIR / "ligand_diversity_balanced.png"
+STATS_BEFORE = DATA_DIR / "ligand_stats.csv"
+STATS_AFTER = DATA_DIR / "ligand_stats_balanced.csv"
+OLIGO_PLOT_ALL = DATA_DIR / "oligomer_state_distribution_ALL_FETCHED.png"
 
 INPUT_PARQUET = "/mnt/cephfs/projects/2023040300_LGIC_under_voltage/PLINDER_2024-06/v2/index/annotation_table.parquet"
 MAX_WORKERS = 20
 RESOLUTION_CUTOFF = 4.0
+MAX_OLIGOMERIC_STATE = 10 
 
-# --- BALANCING PARAMETER ---
-MAX_SAMPLES_PER_LIGAND = 50 
+# BALANCING CONFIGURATION
+TARGET_SAMPLES_PER_LIGAND = 50   # We want exactly 50 valid ones
+OVERSAMPLE_FACTOR = 3            # Fetch 150 to ensure we find 50 good ones after filtering
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-# --- EXPANDED EXCLUDE LIST ---
-# Grouped for clarity. You can add more as you find them.
-IONS = [
-    'ZN', 'MG', 'CA', 'MN', 'FE', 'FE2', 'NI', 'CU', 'CO', # Metals
-    'NA', 'K', 'LI', 'CL', 'IOD', 'BR', 'SR', 'CD', 'HG', # Salts/Heavy atoms
-    'SO4', 'PO4', 'NO3', 'AZI' # Common Ion clusters
-]
-SOLVENTS_BUFFERS = [
-    'HOH', 'DOD', 'WAU', # Water
-    'GOL', 'EDO', 'PG4', 'PEG', 'PGE', 'PE4', '1PE', # PEG/Glycerol series
-    'DMS', 'EOH', 'MOH', 'ACY', 'ACE', 'FMT', 'CIT', 'MES', 'TRS', 'BCT', 'IPA' # Solvents/Buffers
-]
-GLYCANS = [
-    'NAG', 'NDG', 'MAN', 'BMA', 'GAL', 'GLA', 'FUC', 'SIA', 'FUL', 'XYP'
-]
-LIPIDS_DETERGENTS = [
-    # Lipids
-    # 'LPC', 'CLM', 'CHL', 'CLR', 'OLA', 'PLM', 'STE', 'MYR', 'PAL',
-    # 'POP', 'POPC', 'POPE', 'DMPC', 'DPPC', 
-    # Detergents (Common in Cryo-EM)
-    'BOG', 'DDM', 'DM', 'LMT', 'HTG', 'Y01', 'LDA', 'UNL'
-]
+# ----------------------------
+# LISTS (Excluded items)
+# ----------------------------
+IONS = {
+    'ZN', 'MG', 'CA', 'MN', 'FE', 'FE2', 'NI', 'CU', 'CO', 
+    'NA', 'K', 'LI', 'CL', 'IOD', 'BR', 'SR', 'CD', 'HG', 
+    'SO4', 'PO4', 'NO3', 'AZI', 'NH4'
+}
+LIPIDS_DETERGENTS = {
+    'CHL', 'CLR', 'OLA', 'PLM', 'STE', 'MYR', 'PAL', 'POP', 'POPC', 'POPE', 'DMPC', 'DPPC', 'LPC',
+    'DDM', 'BOG', 'LMT', 'DM', 'NG3', 'UDM', 'LDA', 'A85', 'DET', 'UNL'
+}
+SUGARS = {'NAG', 'NDG', 'MAN', 'BMA', 'GAL', 'GLA', 'FUC', 'SIA', 'FUL', 'XYP', 'GLC', 'SUC', 'TRE', 'NGA'}
+COFACTORS = {'HEM', 'HEA', 'FAD', 'FMN', 'NAD', 'NAP', 'ADP', 'ATP', 'GTP', 'GDP', 'AMP', 'SAM', 'SAH', 'TPP', 'PLP'}
+AMINO_ACIDS = {
+    'ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 
+    'LEU', 'LYS', 'MET', 'PHE', 'PRO', 'SER', 'THR', 'TRP', 'TYR', 'VAL',
+    'MSE', 'SEP', 'TPO', 'PTR', 'PCA'
+}
+BUFFERS_SOLVENTS = {'HOH', 'DOD', 'EDO', 'GOL', 'PEG', 'PG4', 'PGE', 'MES', 'HEPES', 'TRIS', 'EPE', 'ACY', 'FMT', 'ACT'}
+EXCLUDE_LIST = IONS | BUFFERS_SOLVENTS
 
-EXCLUDE_LIST = set(IONS + SOLVENTS_BUFFERS + GLYCANS + LIPIDS_DETERGENTS)
+# ----------------------------
+# HELPER FUNCTIONS
+# ----------------------------
+def classify_ligand_smart(row):
+    code = row['ligand_ccd_code'].upper()
+    smiles = row.get('ligand_smiles', '')
+    qed = row.get('ligand_qed', 0.0)
+    
+    if code in AMINO_ACIDS: return "Amino Acids"
+    if code in SUGARS: return "Saccharides"
+    if code in COFACTORS: return "Cofactors/Nucleotides"
+    if code in LIPIDS_DETERGENTS: return "Lipids/Detergents"
+    if code in IONS: return "Ions (Excluded)"
+    if code in BUFFERS_SOLVENTS: return "Buffers/Solvents (Excluded)"
+
+    if RDKIT_AVAILABLE and smiles:
+        try:
+            mol = Chem.MolFromSmiles(smiles)
+            if mol:
+                mw = Descriptors.MolWt(mol)
+                rot_bonds = rdMolDescriptors.CalcNumRotatableBonds(mol)
+                if rot_bonds > 12 and mw > 250: return "Lipids/Detergents"
+                if mw < 300: return "Fragments/Metabolites"
+        except: pass 
+
+    if qed >= 0.4: return "Drug-like"
+    return "Other"
+
+def plot_class_pie_chart(df, plot_path, title):
+    if 'assigned_class' not in df.columns:
+        df['assigned_class'] = df.apply(classify_ligand_smart, axis=1)
+    counts = df['assigned_class'].value_counts()
+    plt.figure(figsize=(10, 8))
+    plt.pie(counts, labels=counts.index, autopct='%1.1f%%', startangle=140)
+    plt.title(title)
+    plt.tight_layout()
+    plt.savefig(plot_path)
+    plt.close()
+
+def plot_ligand_distribution(df, output_path, title, top_n=20):
+    counts = df['ligand_ccd_code'].value_counts().head(top_n)
+    plt.figure(figsize=(12, 6))
+    sns.barplot(x=counts.index, y=counts.values, palette='viridis')
+    plt.title(title)
+    plt.xticks(rotation=45)
+    plt.ylabel("Count")
+    plt.tight_layout()
+    plt.savefig(output_path)
+    plt.close()
+
+def save_statistics(df, output_path):
+    stats = df['ligand_ccd_code'].value_counts().reset_index()
+    stats.columns = ['Ligand', 'Count']
+    stats.to_csv(output_path, index=False)
+
+def plot_oligomer_distribution(oligomer_list, output_path):
+    # Visualize EVERYTHING we fetched
+    valid_oligs = [float(x) for x in oligomer_list if isinstance(x, (int, float, str)) and str(x).replace('.', '', 1).isdigit()]
+    plt.figure(figsize=(10, 6))
+    plt.hist(valid_oligs, bins=range(1, 30), color='salmon', edgecolor='black', align='left')
+    plt.title("Oligomeric State Distribution (All Fetched Candidates)")
+    plt.xlabel("Oligomeric State")
+    plt.ylabel("Frequency")
+    plt.axvline(x=MAX_OLIGOMERIC_STATE + 0.5, color='red', linestyle='--', linewidth=2, label=f'Cutoff ({MAX_OLIGOMERIC_STATE})')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(output_path)
+    plt.close()
 
 def get_pdbs_by_resolution_and_method(max_res=4.0, method="ELECTRON MICROSCOPY"):
-    print(f" Querying RCSB Search API for {method} structures < {max_res}Å...")
+    print(f" Querying RCSB for {method} < {max_res}Å...")
     query = {
         "query": {
-            "type": "group",
-            "logical_operator": "and",
+            "type": "group", "logical_operator": "and",
             "nodes": [
                 {"type": "terminal", "service": "text", "parameters": {"attribute": "rcsb_entry_info.resolution_combined", "operator": "less", "value": max_res}},
                 {"type": "terminal", "service": "text", "parameters": {"attribute": "exptl.method", "operator": "exact_match", "value": method}}
             ]
         },
-        "return_type": "entry",
-        "request_options": {"return_all_hits": True}
+        "return_type": "entry", "request_options": {"return_all_hits": True}
     }
     try:
         r = requests.post("https://search.rcsb.org/rcsbsearch/v2/query", json=query, timeout=30)
         r.raise_for_status()
-        ids = set([x['identifier'].lower() for x in r.json().get('result_set', [])])
-        print(f" Found {len(ids)} PDBs matching criteria.")
-        return ids
-    except Exception as e:
-        print(f" Error: {e}")
-        return set()
+        return set([x['identifier'].lower() for x in r.json().get('result_set', [])])
+    except: return set()
 
 def fetch_pdb_metadata(pdb_id):
-    """
-    Fetches Resolution and TRUE Oligomeric State (Protein Chain Count).
-    """
     try:
-        # 1. Fetch Entry Info (Resolution + EMDB)
         r_entry = requests.get(f"https://data.rcsb.org/rest/v1/core/entry/{pdb_id}", timeout=10)
-        res = "N/A"
+        res, olig = "N/A", "N/A"
         emdb = []
-        
         if r_entry.ok:
             d = r_entry.json()
             res = d.get('rcsb_entry_info', {}).get('resolution_combined', [None])[0]
-            if not res: 
-                res = d.get('em_3d_reconstruction', [{}])[0].get('resolution', "N/A")
+            if not res: res = d.get('em_3d_reconstruction', [{}])[0].get('resolution', "N/A")
             emdb = d.get("rcsb_entry_container_identifiers", {}).get("emdb_ids", [])
         
-        # 2. Fetch Assembly Info (Oligomeric State) 
-        # We query 'assembly 1', which is the standard biological unit
         r_assembly = requests.get(f"https://data.rcsb.org/rest/v1/core/assembly/{pdb_id}/1", timeout=10)
-        olig = "N/A"
-        
         if r_assembly.ok:
             a_data = r_assembly.json()
-            # This specific field gives the count of protein chains (e.g., 5 for pentamer)
             olig = a_data.get('rcsb_assembly_info', {}).get('polymer_entity_instance_count_protein', "N/A")
-            
         return pdb_id, res, olig, emdb
-        
-    except: pass
-    return pdb_id, "Error", "Error", []
+    except: return pdb_id, "Error", "Error", []
 
-def plot_ligand_distribution(df, plot_path, stats_path, title_suffix=""):
-    """Generates plot AND saves the raw count CSV."""
-    counts = df['ligand_ccd_code'].value_counts()
-    counts.to_csv(stats_path, header=["Count"])
-    
-    plt.figure(figsize=(15, 8))
-    plot_data = counts.head(50)
-    bars = plt.bar(plot_data.index, plot_data.values, color='teal', edgecolor='black', alpha=0.7)
-    
-    plt.title(f"Ligand Diversity {title_suffix}\n(Total Unique Types: {len(counts)})", fontsize=16)
-    plt.xlabel("Ligand CCD Code")
-    plt.ylabel("Frequency (Count)")
-    plt.xticks(rotation=90, fontsize=8)
-    plt.grid(axis='y', linestyle='--', alpha=0.3)
-    
-    for bar in bars:
-        height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width()/2., height, f'{int(height)}', ha='center', va='bottom', fontsize=8)
-
-    plt.tight_layout()
-    plt.savefig(plot_path, dpi=150)
-    plt.close()
-    print(f"   - Ligand Plot saved to {plot_path}")
-
-def plot_oligomer_distribution(oligomer_list, plot_path):
-    """Histogram for Oligomeric States."""
-    valid_states = [x for x in oligomer_list if isinstance(x, (int, float)) and x > 0]
-    
-    if not valid_states:
-        print("Warning: No valid oligomeric states found to plot.")
-        return
-
-    counts = pd.Series(valid_states).value_counts().sort_index()
-
-    plt.figure(figsize=(10, 6))
-    bars = plt.bar(counts.index.astype(str), counts.values, color='orange', edgecolor='black', alpha=0.7)
-    
-    plt.title("Distribution of Oligomeric States (Subunit Count)", fontsize=14)
-    plt.xlabel("Number of Subunits (1=Monomer, 2=Dimer, etc.)", fontsize=12)
-    plt.ylabel("Number of Structures", fontsize=12)
-    plt.grid(axis='y', linestyle='--', alpha=0.3)
-
-    for bar in bars:
-        height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width()/2., height, f'{int(height)}', ha='center', va='bottom')
-
-    plt.tight_layout()
-    plt.savefig(plot_path, dpi=150)
-    plt.close()
-    print(f"   - Oligomer Plot saved to {plot_path}")
-
-def diagnose_missing_entry(df, target_pdb="6x3z"):
-    """Checks why a specific PDB is missing from the clean dataframe."""
-    print(f"\n--- DIAGNOSTIC FOR {target_pdb.upper()} ---")
-    target = target_pdb.lower()
-    subset = df[df['entry_pdb_id_norm'] == target]
-    
-    if len(subset) == 0:
-        print(f"Result: {target_pdb} is NOT present in the input Parquet file.")
-        print("Reason: Plinder likely filtered it out during database creation (e.g. steric clashes, low QED).")
-        return
-
-    print(f"Found {len(subset)} rows for {target_pdb} in raw Parquet.")
-    
-    # Check filters
-    for _, row in subset.iterrows():
-        ligand = row['ligand_ccd_code']
-        print(f"  Ligand: {ligand}")
-        print(f"    - Is Covalent? {row['ligand_is_covalent']} (Must be False)")
-        print(f"    - Method? {row['entry_determination_method']} (Must be ELECTRON MICROSCOPY)")
-        print(f"    - Is Oligo? {row['ligand_is_oligo']} (Must be False)")
-        print(f"    - Is Other? {row['ligand_is_other']} (Must be False)")
-        print(f"    - In Exclude List? {ligand in EXCLUDE_LIST} (Must be False)")
-
+# ----------------------------
+# MAIN
+# ----------------------------
 def main():
-    if not Path(INPUT_PARQUET).exists(): 
-        print(f"Error: Parquet file not found at {INPUT_PARQUET}")
-        return
+    if not Path(INPUT_PARQUET).exists(): return
 
-    # 1. READ & FILTER
     print(f" Reading Parquet...")
     df = pd.read_parquet(INPUT_PARQUET, engine='pyarrow')
     df['entry_pdb_id_norm'] = df['entry_pdb_id'].str.lower()
     
-    # --- DIAGNOSTIC START ---
-    # This will print exactly why 6x3z is being dropped
-    diagnose_missing_entry(df, "6x3z")
-    # --- DIAGNOSTIC END ---
-    
     valid_pdb_set = get_pdbs_by_resolution_and_method(max_res=RESOLUTION_CUTOFF)
     
+    # 1. LOAD EVERYTHING (No Oligomer Restriction yet, just Method/Res/Lists)
     clean_df = df[
-        (~df['ligand_is_covalent']) &
         (df['entry_determination_method'] == 'ELECTRON MICROSCOPY') &
         (df['ligand_is_oligo']==False) &
-        (df['ligand_is_other']==False) &
         (~df['ligand_ccd_code'].isin(EXCLUDE_LIST)) & 
         (df['entry_pdb_id_norm'].isin(valid_pdb_set)) 
     ].copy()
 
-    print(f" Entries before balancing: {len(clean_df)}")
+    print(" Classifying ligands...")
+    clean_df['assigned_class'] = clean_df.apply(classify_ligand_smart, axis=1)
+
+    # --- PLOTS BEFORE BALANCING ---
+    # This reflects the "Wild West" before we enforce 50 limit or oligomer limit
+    print(" Generating 'Before' plots...")
+    plot_class_pie_chart(clean_df.sample(min(10000, len(clean_df))), PIE_CHART_BEFORE, "Before Balancing")
+    plot_ligand_distribution(clean_df, LIGAND_PLOT_BEFORE, "Top 20 Ligands (Before)")
+    save_statistics(clean_df, STATS_BEFORE)
+
+    # --- OVERSAMPLING ---
+    # We grab 3x the target (150) blindly from this pool. 
+    # This creates a "candidates list" that we will then scrutinize for oligomer state.
+    print(f" Oversampling: Selecting {TARGET_SAMPLES_PER_LIGAND * OVERSAMPLE_FACTOR} candidates per ligand...")
     
-    # 2. APPLY BALANCING
-    print(f" Applying Balancing: Max {MAX_SAMPLES_PER_LIGAND} entries per ligand type...")
+    unique_combinations = clean_df.drop_duplicates(subset=['ligand_ccd_code', 'entry_pdb_id_norm'])
     
-    balanced_df = clean_df.groupby('ligand_ccd_code').apply(
-        lambda x: x.sample(n=min(len(x), MAX_SAMPLES_PER_LIGAND), random_state=42)
+    oversampled_df = unique_combinations.groupby('ligand_ccd_code').apply(
+        lambda x: x.sample(n=min(len(x), TARGET_SAMPLES_PER_LIGAND * OVERSAMPLE_FACTOR), random_state=42)
     ).reset_index(drop=True)
+
+    pdbs_to_fetch = list(oversampled_df['entry_pdb_id_norm'].unique())
     
-    print(f" Entries after balancing: {len(balanced_df)}")
+    print(f" Fetching metadata for {len(pdbs_to_fetch)} unique structures (Oversampled Pool)...")
     
-    # 3. PLOT LIGANDS
-    plot_ligand_distribution(balanced_df, LIGAND_PLOT_OUTPUT, STATS_OUTPUT, title_suffix="(Balanced)")
-
-    # 4. Finalize List for NPZ/Excel
-    grouped = balanced_df.groupby('entry_pdb_id_norm')
-    pdb_ids_list, lig_names, lig_smiles = [], [], []
-
-    for pdb, group in grouped:
-        pdb_ids_list.append(pdb)
-        lig_names.append(list(set(group['ligand_ccd_code'])))
-        lig_smiles.append(list(set(group['ligand_smiles'])))
-
-    # 5. Fetch Metadata (Improved Oligomer Fetching)
-    print(f" Fetching metadata for {len(pdb_ids_list)} structures...")
     resolutions, emdb_map, olig_states = {}, {}, {}
-    
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
-        futures = {ex.submit(fetch_pdb_metadata, p): p for p in pdb_ids_list}
+        futures = {ex.submit(fetch_pdb_metadata, p): p for p in pdbs_to_fetch}
         for f in tqdm(as_completed(futures), total=len(futures)):
             pid, res, olig, emdb = f.result()
             resolutions[pid] = res
             olig_states[pid] = olig
             emdb_map[pid] = emdb
 
-    # 6. PLOT OLIGOMER STATES
-    olig_values = [olig_states[p] for p in pdb_ids_list]
-    plot_oligomer_distribution(olig_values, OLIGO_PLOT_OUTPUT)
+    # --- PLOT OLIGOMERS (ALL) ---
+    # You asked to visualize ALL oligomeric states found
+    print(" Generating Oligomer Distribution plot (All Fetched Data)...")
+    all_values = list(olig_states.values())
+    plot_oligomer_distribution(all_values, OLIGO_PLOT_ALL)
 
-    # 7. Save Data Files
-    data_dict = {
-        "pdb_ids": np.array(pdb_ids_list),
-        "ligand_names": np.array(lig_names, dtype=object),
-        "ligand_smiles": np.array(lig_smiles, dtype=object),
-        "resolutions": np.array([resolutions.get(p) for p in pdb_ids_list], dtype=object),
-        "olig_states": np.array([olig_states.get(p) for p in pdb_ids_list], dtype=object),
-        "emdb_ids": np.array([emdb_map.get(p, []) for p in pdb_ids_list], dtype=object)
-    }
-    np.savez(OUTPUT_NPZ, data=data_dict)
+    # --- FILTERING & BALANCING (THE SIEVE) ---
+    print(f" Filtering & Capping to max {TARGET_SAMPLES_PER_LIGAND} valid structures per ligand...")
     
-    pd.DataFrame([{
-        "PDB_ID": p,
-        "Ligand_Names": ",".join(data_dict["ligand_names"][i]),
-        "SMILES": " | ".join(data_dict["ligand_smiles"][i]),
-        "Resolution": data_dict["resolutions"][i],
-        "Oligomeric_State": data_dict["olig_states"][i], 
-        "EMDB_IDs": ",".join(data_dict["emdb_ids"][i])
-    } for i, p in enumerate(pdb_ids_list)]).to_excel(OUTPUT_XLSX, index=False)
+    final_rows = []
+    ligand_counters = Counter()
     
-    print(f" Done. Saved balanced dataset to {OUTPUT_XLSX}")
+    # Iterate through the oversampled list. 
+    # Since we used .sample(), the order is random.
+    for _, row in tqdm(oversampled_df.iterrows(), total=len(oversampled_df)):
+        ligand = row['ligand_ccd_code']
+        pdb_id = row['entry_pdb_id_norm']
+        
+        # 1. STOP if we already have 50 good ones for this ligand
+        if ligand_counters[ligand] >= TARGET_SAMPLES_PER_LIGAND:
+            continue
+            
+        # 2. CHECK Oligomer State
+        olig = olig_states.get(pdb_id, "N/A")
+        
+        if isinstance(olig, (int, float)):
+            if olig > MAX_OLIGOMERIC_STATE:
+                continue # REJECT: Too big
+        elif olig == "N/A":
+             # Decision: Keep N/A (usually smaller) or discard. 
+             # We will keep for now to maximize data, assuming N/A isn't a giant virus capsid.
+             pass 
+
+        # 3. ACCEPT
+        final_rows.append({
+            "PDB_ID": pdb_id,
+            "Ligand_Names": ligand, 
+            "SMILES": row.get('ligand_smiles', ''),
+            "Class": row.get('assigned_class', 'Other'),
+            "Resolution": resolutions.get(pdb_id, "N/A"),
+            "Oligomeric_State": olig,
+            "EMDB_IDs": emdb_map.get(pdb_id, [])
+        })
+        ligand_counters[ligand] += 1
+
+    # --- PLOTS AFTER BALANCING ---
+    final_df_flat = pd.DataFrame(final_rows)
+    
+    print(" Generating 'After' plots (Final Valid Dataset)...")
+    plot_class_pie_chart(final_df_flat.rename(columns={'Class': 'assigned_class'}), PIE_CHART_AFTER, "After Balancing")
+    
+    # Custom Bar Plot for 'After' (since columns changed)
+    counts = final_df_flat['Ligand_Names'].value_counts().reset_index()
+    counts.columns = ['ligand_ccd_code', 'count']
+    plt.figure(figsize=(12, 6))
+    sns.barplot(x=counts['ligand_ccd_code'].head(20), y=counts['count'].head(20), palette='viridis')
+    plt.title("Top 20 Ligands (After Balancing)")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.savefig(LIGAND_PLOT_AFTER)
+    counts.to_csv(STATS_AFTER, index=False)
+
+    # --- SAVE FILES ---
+    # We must aggregate again because one PDB might have multiple ligands in our final set
+    grouped_final = final_df_flat.groupby('PDB_ID')
+    
+    pdb_out, lig_out, smiles_out, res_out, olig_out, emdb_out = [], [], [], [], [], []
+    excel_data = []
+
+    for pid, group in grouped_final:
+        unique_ligs = list(set(group['Ligand_Names']))
+        unique_smiles = list(set(group['SMILES']))
+        res = group.iloc[0]['Resolution']
+        olig = group.iloc[0]['Oligomeric_State']
+        emdb = group.iloc[0]['EMDB_IDs']
+
+        # Prepare for NPZ
+        pdb_out.append(pid)
+        lig_out.append(unique_ligs)
+        smiles_out.append(unique_smiles)
+        res_out.append(res)
+        olig_out.append(olig)
+        emdb_out.append(emdb)
+
+        # Prepare for Excel
+        excel_data.append({
+            "PDB_ID": pid,
+            "Ligand_Names": ",".join(unique_ligs),
+            "SMILES": " | ".join(unique_smiles),
+            "Resolution": res,
+            "Oligomeric_State": olig,
+            "EMDB_IDs": ",".join(emdb) if isinstance(emdb, list) else str(emdb)
+        })
+
+    print(f" Saving {len(pdb_out)} unique structures to {OUTPUT_NPZ}...")
+    np.savez(OUTPUT_NPZ, data={
+        "pdb_ids": np.array(pdb_out),
+        "ligand_names": np.array(lig_out, dtype=object),
+        "ligand_smiles": np.array(smiles_out, dtype=object),
+        "resolutions": np.array(res_out, dtype=object),
+        "olig_states": np.array(olig_out, dtype=object),
+        "emdb_ids": np.array(emdb_out, dtype=object)
+    })
+
+    pd.DataFrame(excel_data).to_excel(OUTPUT_XLSX, index=False)
+    print(f" Saved metadata to {OUTPUT_XLSX}")
 
 if __name__ == "__main__":
     main()
