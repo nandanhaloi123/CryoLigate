@@ -30,8 +30,8 @@ METADATA_FILE = PROJECT_ROOT / "data" / "metadata" / "pdb_em_metadata_balanced.n
 # ----------------------------
 # PARAMETERS
 # ----------------------------
-TEST_LIMIT = 10           # How many tasks to run
-MAX_WORKERS = 8           # Number of threads
+TEST_LIMIT = None           # How many tasks to run
+MAX_WORKERS = 16           # Number of threads
 
 # --- CONFIGURABLE FILTER SWITCH ---
 ONLY_TEST_AMINO_ACIDS = False  
