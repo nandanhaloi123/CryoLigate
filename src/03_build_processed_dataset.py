@@ -34,7 +34,7 @@ TEST_LIMIT = 10           # How many tasks to run
 MAX_WORKERS = 8           # Number of threads
 
 # --- CONFIGURABLE FILTER SWITCH ---
-ONLY_TEST_AMINO_ACIDS = True  
+ONLY_TEST_AMINO_ACIDS = False  
 
 AMINO_ACIDS = {
     'ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 
