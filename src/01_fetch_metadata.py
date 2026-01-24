@@ -301,6 +301,7 @@ def main():
     for pid, group in grouped_final:
         unique_ligs = list(set(group['Ligand_Names']))
         unique_smiles = list(set(group['SMILES']))
+        unique_classes = list(set(group['Class']))
         res = group.iloc[0]['Resolution']
         olig = group.iloc[0]['Oligomeric_State']
         emdb = group.iloc[0]['EMDB_IDs']
@@ -317,6 +318,7 @@ def main():
         excel_data.append({
             "PDB_ID": pid,
             "Ligand_Names": ",".join(unique_ligs),
+            "Ligand_Classes": ",".join(unique_classes),
             "SMILES": " | ".join(unique_smiles),
             "Resolution": res,
             "Oligomeric_State": olig,
