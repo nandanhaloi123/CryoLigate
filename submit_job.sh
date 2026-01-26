@@ -5,6 +5,7 @@
 #SBATCH -N 1
 #SBATCH -e slurm-%j.log
 #SBATCH -o slurm-%j.log
+#SBATCH --mem=32G
 
 #SBATCH -t 48:00:00
 #SBATCH -J Train
@@ -12,4 +13,4 @@
 # queue
 #SBATCH -p lindahl4
 
-python src/02_download_raw_data.py
+python src/03_build_processed_dataset.py

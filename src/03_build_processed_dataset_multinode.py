@@ -1,3 +1,4 @@
+import argparse
 import os
 # --- CRITICAL FIX FOR HDF5 LOCKING ---
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
@@ -7,6 +8,7 @@ import numpy as np
 import threading
 import h5py
 import random
+import math
 from pathlib import Path
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
@@ -16,6 +18,14 @@ import scipy.ndimage
 
 # --- IMPORT SHARED UTILS ---
 from utils_common import resample_em_map, coord_to_grid_index, save_mrc_with_origin
+
+# ----------------------------
+# ARGUMENT PARSING (NEW)
+# ----------------------------
+parser = argparse.ArgumentParser(description="Distributed Dataset Building")
+parser.add_argument("--node_id", type=int, default=0, help="Index of the current node (0-based)")
+parser.add_argument("--total_nodes", type=int, default=1, help="Total number of nodes participating")
+args = parser.parse_args()
 
 # ----------------------------
 # PATH CONFIGURATION
@@ -31,7 +41,7 @@ METADATA_FILE = PROJECT_ROOT / "data" / "metadata" / "pdb_em_metadata_balanced.n
 # PARAMETERS
 # ----------------------------
 TEST_LIMIT = None         # Set to None to process EVERYTHING
-MAX_WORKERS = 4
+MAX_WORKERS = 4           # Reduced to prevent OOM
 
 # --- CONFIGURABLE FILTER SWITCH ---
 ONLY_TEST_AMINO_ACIDS = False  
@@ -122,7 +132,13 @@ def process_task(task, h5file, pbar):
         # 3. READ MAP
         m = gemmi.read_ccp4_map(str(map_path))
         m.setup(0.0, gemmi.MapSetup.Full)
+        
+        # Resample immediately so we can drop the heavy original map
         grid = resample_em_map(m.grid, TARGET_VOXEL_SIZE)
+        
+        # --- CRITICAL MEMORY FIX ---
+        del m  # Delete the heavy original map immediately to free RAM
+        # ---------------------------
         
         for i, lig_res in enumerate(target_residues, 1):
             try:
@@ -213,7 +229,9 @@ def process_task(task, h5file, pbar):
 # ----------------------------
 if __name__ == "__main__":
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-    OUTPUT_H5 = PROCESSED_DIR / "ml_dataset.h5"
+    
+    # 1. UNIQUE OUTPUT PER NODE
+    OUTPUT_H5 = PROCESSED_DIR / f"ml_dataset_part_{args.node_id}.h5"
 
     if not METADATA_FILE.exists():
         print("Error: Metadata file missing.")
@@ -227,19 +245,29 @@ if __name__ == "__main__":
         for pid, ccds, smis in zip(metadata["pdb_ids"], metadata["ligand_names"], metadata["ligand_smiles"])
     }
 
-    # --- SCANNING WITH CONFIGURABLE FILTER ---
-    if ONLY_TEST_AMINO_ACIDS:
-        print(f"Scanning for ALL samples containing **AMINO ACID** ligands...")
-    else:
-        print(f"Scanning for ALL random samples (Filter OFF)...")
+    print(f"Node {args.node_id}/{args.total_nodes}: Initializing...")
     
-    existing_dirs = [d for d in RAW_DATA_DIR.iterdir() if d.is_dir()]
-    random.shuffle(existing_dirs)
+    # --- SPLIT THE DATA ---
+    existing_dirs = sorted([d for d in RAW_DATA_DIR.iterdir() if d.is_dir()]) # Sort for consistency
+    # Only shuffle *within* the deterministic split if desired, or shuffle once globally with fixed seed.
+    # Here we keep it sorted -> split -> shuffle internal to ensure coverage.
+    
+    # Calculate slice for this node
+    chunk_size = math.ceil(len(existing_dirs) / args.total_nodes)
+    start_idx = args.node_id * chunk_size
+    end_idx = min(start_idx + chunk_size, len(existing_dirs))
+    
+    my_dirs = existing_dirs[start_idx:end_idx]
+    
+    # Shuffle only my portion so I don't get stuck on bad blocks
+    random.shuffle(my_dirs)
+    
+    print(f"Node {args.node_id}: Assigned directories {start_idx} to {end_idx} (Count: {len(my_dirs)})")
 
     valid_tasks = []
     
-    for d in existing_dirs:
-        # ### <--- FIXED: Check if TEST_LIMIT is not None
+    for d in my_dirs:
+        # Check limit per node
         if TEST_LIMIT is not None and len(valid_tasks) >= TEST_LIMIT:
             break
             
@@ -262,15 +290,12 @@ if __name__ == "__main__":
                 
                 valid_tasks.append((pdb_id, struct_files[0], map_files[0], ccd, smi))
                 
-                # ### <--- FIXED: Check if TEST_LIMIT is not None
                 if TEST_LIMIT is not None and len(valid_tasks) >= TEST_LIMIT: 
                     break 
 
-    print(f"Found {len(valid_tasks)} tasks.")
+    print(f"Node {args.node_id}: Found {len(valid_tasks)} tasks.")
     
     # --- PROCESSING ---
-    # Since TEST_LIMIT is None, we use a larger multiplier for the array size or dynamically resize later.
-    # Here I use 10x the task count as a safe upper bound.
     ESTIMATED_MAX = len(valid_tasks) * 10 
     
     with h5py.File(OUTPUT_H5, "w") as h5:
@@ -285,17 +310,17 @@ if __name__ == "__main__":
         h5.create_dataset("crop_start_voxel", (ESTIMATED_MAX, 3), dtype="int32", chunks=True)
         h5.create_dataset("physical_origin", (ESTIMATED_MAX, 3), dtype="float32", chunks=True)
 
-        print("Starting Processing...")
+        print(f"Node {args.node_id}: Starting Processing...")
 
-        with tqdm(total=len(valid_tasks), desc="Processing") as pbar:
+        with tqdm(total=len(valid_tasks), desc=f"Node {args.node_id}") as pbar:
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
                 futures = [executor.submit(process_task, task, h5, pbar) for task in valid_tasks]
                 for future in futures:
                     future.result()
 
         final_count = global_write_index
-        print(f"\nComplete. Saved {final_count} instances.")
+        print(f"\nNode {args.node_id}: Complete. Saved {final_count} instances.")
         for key in h5.keys():
             h5[key].resize(final_count, axis=0)
 
-    print(f"Dataset saved: {OUTPUT_H5}")
+    print(f"Dataset part saved: {OUTPUT_H5}")
