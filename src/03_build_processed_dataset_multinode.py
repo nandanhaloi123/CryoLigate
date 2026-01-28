@@ -12,7 +12,6 @@ import math
 from pathlib import Path
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
-# Removed Bio.PDB imports since we are using Gemmi now
 import gemmi
 import scipy.ndimage
 
@@ -20,11 +19,11 @@ import scipy.ndimage
 from utils_common import resample_em_map, coord_to_grid_index, save_mrc_with_origin
 
 # ----------------------------
-# ARGUMENT PARSING (NEW)
+# ARGUMENT PARSING
 # ----------------------------
 parser = argparse.ArgumentParser(description="Distributed Dataset Building")
-parser.add_argument("--node_id", type=int, default=0, help="Index of the current node (0-based)")
-parser.add_argument("--total_nodes", type=int, default=1, help="Total number of nodes participating")
+parser.add_argument("--node_id", type=int, default=0, help="Index of the current node")
+parser.add_argument("--total_nodes", type=int, default=1, help="Total number of nodes")
 args = parser.parse_args()
 
 # ----------------------------
@@ -32,7 +31,6 @@ args = parser.parse_args()
 # ----------------------------
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-
 RAW_DATA_DIR = PROJECT_ROOT / "data" / "raw"
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 METADATA_FILE = PROJECT_ROOT / "data" / "metadata" / "pdb_em_metadata_balanced.npz"
@@ -40,53 +38,48 @@ METADATA_FILE = PROJECT_ROOT / "data" / "metadata" / "pdb_em_metadata_balanced.n
 # ----------------------------
 # PARAMETERS
 # ----------------------------
-TEST_LIMIT = None         # Set to None to process EVERYTHING
-MAX_WORKERS = 4           # Reduced to prevent OOM
-
-# --- CONFIGURABLE FILTER SWITCH ---
+TEST_LIMIT = None      
+MAX_WORKERS = 4           
 ONLY_TEST_AMINO_ACIDS = False  
-
 AMINO_ACIDS = {
     'ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 
     'LEU', 'LYS', 'MET', 'PHE', 'PRO', 'SER', 'THR', 'TRP', 'TYR', 'VAL'
 }
-
 TARGET_VOXEL_SIZE = 0.5   
 GRID_SIZE = 96            
 SYNTHETIC_RESOLUTION = 4.0 
 NUM_CHANNELS = 2
 
+# --- NEW: DISTANCE THRESHOLD ---
+INTERFERENCE_DIST_THRESHOLD = 5.0 # Angstroms (Only skip if closer than this)
+
+# --- IGNORE COMMON IONS/BUFFERS ---
+IGNORED_LIGANDS = {
+    "HOH", "DOD", "WAT", # Water
+    "NA", "MG", "CL", "ZN", "MN", "CA", "K", "FE", "CU", "NI", # Ions
+    "SO4", "PO4", "ACT", "GOL", "PEG", "EDO" # Buffers
+}
+
 h5_lock = threading.Lock()
 global_write_index = 0
 
 # ----------------------------
-# HELPER FUNCTIONS (Adapted for Gemmi)
+# HELPER FUNCTIONS
 # ----------------------------
 
 def generate_synthetic_map(atoms, origin_angstroms, box_size, voxel_size, resolution):
-    """
-    Adapted to accept GEMMI atoms directly.
-    """
     grid = np.zeros((box_size, box_size, box_size), dtype=np.float32)
     count = 0
-    
     for atom in atoms:
-        # Gemmi element handling
         elem = atom.element.name.upper()
         if elem == 'H': continue 
-        
-        # Gemmi position handling
         pos = np.array([atom.pos.x, atom.pos.y, atom.pos.z])
-        
         rel_pos = (pos - origin_angstroms) / voxel_size
         idx = np.round(rel_pos).astype(np.int32)
-        
         if (0 <= idx[0] < box_size and 0 <= idx[1] < box_size and 0 <= idx[2] < box_size):
             grid[idx[0], idx[1], idx[2]] += 1.0
             count += 1
-
     if count == 0: return grid
-    
     sigma_angstrom = 0.225 * resolution
     sigma_pixels = sigma_angstrom / voxel_size
     density = scipy.ndimage.gaussian_filter(grid, sigma=sigma_pixels, mode='constant', cval=0.0)
@@ -95,8 +88,37 @@ def generate_synthetic_map(atoms, origin_angstroms, box_size, voxel_size, resolu
         density = np.tanh(density / (peak_approx * 0.3 + 1e-6))
     return density
 
+def check_ligand_interference(target_res, all_het_residues, dist_threshold=6.0):
+    """
+    Checks if any atom from 'all_het_residues' is within 'dist_threshold' Angstroms
+    of ANY atom in the target ligand.
+    """
+    # 1. Extract Target Coordinates
+    target_coords = np.array([[a.pos.x, a.pos.y, a.pos.z] for a in target_res])
+    
+    for other_res in all_het_residues:
+        # Skip Self
+        if other_res is target_res:
+            continue
+            
+        # 2. Extract Other Coordinates
+        other_coords = np.array([[a.pos.x, a.pos.y, a.pos.z] for a in other_res])
+        
+        # 3. Calculate Distances (Vectorized)
+        # Using broadcasting to check all-vs-all atoms between the two molecules
+        # Shape: (num_target_atoms, 1, 3) - (1, num_other_atoms, 3)
+        diff = target_coords[:, np.newaxis, :] - other_coords[np.newaxis, :, :]
+        dists = np.sqrt(np.sum(diff**2, axis=2))
+        
+        # 4. Check if ANY pair is too close
+        min_dist = np.min(dists)
+        if min_dist < dist_threshold:
+            return True, f"{other_res.name} (Seq: {other_res.seqid.num}) is {min_dist:.1f}A away"
+
+    return False, None
+
 # ----------------------------
-# PROCESSOR (NOW USING GEMMI DIRECTLY)
+# PROCESSOR
 # ----------------------------
 def process_task(task, h5file, pbar):
     global global_write_index
@@ -106,49 +128,56 @@ def process_task(task, h5file, pbar):
     output_subdir.mkdir(parents=True, exist_ok=True)
 
     try:
-        # 1. READ STRUCTURE WITH GEMMI (No Biopython)
         st = gemmi.read_structure(str(struct_path))
         model = st[0]
         
-        # 2. SEPARATE LIGANDS (HETATM) AND PROTEIN (ATOM)
         target_residues = []
         protein_atoms = []
+        all_het_residues = [] 
 
+        # 1. First Pass: Collect everything
         for chain in model:
             for res in chain:
-                # Gemmi flag: 'H' = HETATM, 'A' = ATOM
+                if res.het_flag == 'H':
+                    # Only add to "Potential Interferences" if NOT in ignore list
+                    if res.name not in IGNORED_LIGANDS:
+                        all_het_residues.append(res)
+                    
+                    if res.name == target_ccd:
+                        target_residues.append(res)
                 
-                # Check for Target Ligand (Must be HETATM)
-                if res.name == target_ccd and res.het_flag == 'H':
-                    target_residues.append(res)
-                
-                # Check for Protein (Must be ATOM)
                 elif res.het_flag == 'A':
                     for atom in res:
                         protein_atoms.append(atom)
 
         if not target_residues: return
 
-        # 3. READ MAP
+        # 2. Read Map
         m = gemmi.read_ccp4_map(str(map_path))
         m.setup(0.0, gemmi.MapSetup.Full)
-        
-        # Resample immediately so we can drop the heavy original map
         grid = resample_em_map(m.grid, TARGET_VOXEL_SIZE)
+        del m  
         
-        # --- CRITICAL MEMORY FIX ---
-        del m  # Delete the heavy original map immediately to free RAM
-        # ---------------------------
-        
+        # 3. Process Target Ligands
         for i, lig_res in enumerate(target_residues, 1):
             try:
-                # Convert Gemmi residue atoms to a list
                 ligand_atoms = list(lig_res)
-                all_atoms = protein_atoms + ligand_atoms
-                
-                # Calculate Centroid (using Gemmi positions)
                 lig_coords = np.array([[a.pos.x, a.pos.y, a.pos.z] for a in ligand_atoms])
                 centroid = np.mean(lig_coords, axis=0)
+
+                # --- INTERFERENCE CHECK (DISTANCE BASED) ---
+                has_interference, reason = check_ligand_interference(
+                    lig_res, 
+                    all_het_residues, 
+                    dist_threshold=INTERFERENCE_DIST_THRESHOLD
+                )
+                
+                if has_interference:
+                    print(f"[{pdb_id}] SKIPPED {target_ccd}_{i}: Reason -> {reason}")
+                    continue
+                # -------------------------------------------
+                
+                all_atoms = protein_atoms + ligand_atoms
                 
                 center_idx = coord_to_grid_index(centroid, grid)
                 half = GRID_SIZE // 2
@@ -161,7 +190,6 @@ def process_task(task, h5file, pbar):
                 phys_origin_vec = grid.unit_cell.orthogonalize(frac_origin)
                 phys_origin = np.array([phys_origin_vec.x, phys_origin_vec.y, phys_origin_vec.z], dtype=np.float32)
 
-                # Generate GT using updated Gemmi-compatible helper
                 synthetic_density = generate_synthetic_map(all_atoms, phys_origin, GRID_SIZE, TARGET_VOXEL_SIZE, SYNTHETIC_RESOLUTION)
                 
                 synthetic_density = (synthetic_density - np.mean(synthetic_density)) / (np.std(synthetic_density) + 1e-6)
@@ -169,13 +197,11 @@ def process_task(task, h5file, pbar):
 
                 data = np.zeros((NUM_CHANNELS, GRID_SIZE, GRID_SIZE, GRID_SIZE), np.float32)
                 
-                # Channel 0: Protein (Gemmi Atoms)
                 for atom in protein_atoms:
                     pos = np.array([atom.pos.x, atom.pos.y, atom.pos.z])
                     v = coord_to_grid_index(pos, grid) - start_idx
                     if np.all((v >= 0) & (v < GRID_SIZE)): data[0, v[0], v[1], v[2]] = 1.0
                 
-                # Channel 1: Ligand (Gemmi Atoms)
                 for atom in ligand_atoms:
                     pos = np.array([atom.pos.x, atom.pos.y, atom.pos.z])
                     v = coord_to_grid_index(pos, grid) - start_idx
@@ -189,12 +215,11 @@ def process_task(task, h5file, pbar):
                 out_syn_mrc = output_subdir / f"ml_gt_{target_ccd}_{i}.mrc"
                 save_mrc_with_origin(synthetic_density.T, out_syn_mrc, TARGET_VOXEL_SIZE, phys_origin)
                 
-                # Save Clean PDB using Gemmi (Replaces PDBIO)
                 pdb_out_path = output_subdir / f"{pdb_id}_{target_ccd}_{i}_clean.pdb"
                 new_st = gemmi.Structure()
                 new_model = gemmi.Model("1")
                 new_chain = gemmi.Chain("A")
-                new_chain.add_residue(lig_res) # Copy just the ligand residue
+                new_chain.add_residue(lig_res)
                 new_model.add_chain(new_chain)
                 new_st.add_model(new_model)
                 new_st.write_pdb(str(pdb_out_path))
@@ -217,6 +242,7 @@ def process_task(task, h5file, pbar):
                 pbar.set_description(f"Processing (Saved: {global_write_index})")
 
             except Exception as e:
+                # print(f"[{pdb_id}] Inner loop error: {e}")
                 pass 
 
     except Exception as e:
@@ -229,8 +255,6 @@ def process_task(task, h5file, pbar):
 # ----------------------------
 if __name__ == "__main__":
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-    
-    # 1. UNIQUE OUTPUT PER NODE
     OUTPUT_H5 = PROCESSED_DIR / f"ml_dataset_part_{args.node_id}.h5"
 
     if not METADATA_FILE.exists():
@@ -247,55 +271,34 @@ if __name__ == "__main__":
 
     print(f"Node {args.node_id}/{args.total_nodes}: Initializing...")
     
-    # --- SPLIT THE DATA ---
-    existing_dirs = sorted([d for d in RAW_DATA_DIR.iterdir() if d.is_dir()]) # Sort for consistency
-    # Only shuffle *within* the deterministic split if desired, or shuffle once globally with fixed seed.
-    # Here we keep it sorted -> split -> shuffle internal to ensure coverage.
-    
-    # Calculate slice for this node
+    existing_dirs = sorted([d for d in RAW_DATA_DIR.iterdir() if d.is_dir()])
     chunk_size = math.ceil(len(existing_dirs) / args.total_nodes)
     start_idx = args.node_id * chunk_size
     end_idx = min(start_idx + chunk_size, len(existing_dirs))
     
     my_dirs = existing_dirs[start_idx:end_idx]
-    
-    # Shuffle only my portion so I don't get stuck on bad blocks
     random.shuffle(my_dirs)
     
     print(f"Node {args.node_id}: Assigned directories {start_idx} to {end_idx} (Count: {len(my_dirs)})")
 
     valid_tasks = []
-    
     for d in my_dirs:
-        # Check limit per node
-        if TEST_LIMIT is not None and len(valid_tasks) >= TEST_LIMIT:
-            break
-            
+        if TEST_LIMIT is not None and len(valid_tasks) >= TEST_LIMIT: break
         pdb_id = d.name.lower()
         if pdb_id not in meta_lookup: continue
-            
         struct_files = list(d.glob("*.cif"))
         if not struct_files: struct_files = list(d.glob("*.pdb"))
         map_files = list(d.glob("*.map.gz"))
         
         if struct_files and map_files:
             possible_ccds, possible_smiles = meta_lookup[pdb_id]
-            
             for ccd, smi in zip(possible_ccds, possible_smiles):
-                
-                # --- FILTER LOGIC ---
                 if ONLY_TEST_AMINO_ACIDS:
-                    if ccd not in AMINO_ACIDS:
-                        continue 
-                
+                    if ccd not in AMINO_ACIDS: continue 
                 valid_tasks.append((pdb_id, struct_files[0], map_files[0], ccd, smi))
-                
-                if TEST_LIMIT is not None and len(valid_tasks) >= TEST_LIMIT: 
-                    break 
+                if TEST_LIMIT is not None and len(valid_tasks) >= TEST_LIMIT: break 
 
     print(f"Node {args.node_id}: Found {len(valid_tasks)} tasks.")
-    
-    # --- PROCESSING ---
     ESTIMATED_MAX = len(valid_tasks) * 10 
     
     with h5py.File(OUTPUT_H5, "w") as h5:

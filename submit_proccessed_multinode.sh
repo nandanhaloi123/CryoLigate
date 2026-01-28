@@ -5,13 +5,13 @@
 #SBATCH -N 1
 #SBATCH -e slurm-%j.log
 #SBATCH -o slurm-%j.log
-#SBATCH --mem=32G
 #SBATCH --array=0-9
-#SBATCH -t 48:00:00
+#SBATCH --mem=32G
+#SBATCH -t 24:00:00
 #SBATCH -J Train
 
 # queue
-#SBATCH -p lindahl4,lindahl3
+#SBATCH -p lindahl5
 
 echo "Starting Job Array ID: $SLURM_ARRAY_TASK_ID"
 echo "Running on node: $(hostname)"

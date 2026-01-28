@@ -60,7 +60,7 @@ LIPIDS_DETERGENTS = {
     'CHL', 'CLR', 'OLA', 'PLM', 'STE', 'MYR', 'PAL', 'POP', 'POPC', 'POPE', 'DMPC', 'DPPC', 'LPC',
     'DDM', 'BOG', 'LMT', 'DM', 'NG3', 'UDM', 'LDA', 'A85', 'DET', 'UNL'
 }
-SUGARS = {'NAG', 'NDG', 'MAN', 'BMA', 'GAL', 'GLA', 'FUC', 'SIA', 'FUL', 'XYP', 'GLC', 'SUC', 'TRE', 'NGA'}
+SUGARS = {'NAG', 'NDG', 'MAN', 'BMA', 'GAL', 'GLA', 'FUC', 'SIA', 'FUL', 'XYP', 'GLC', 'SUC', 'TRE', 'NGA', 'AHR'}
 COFACTORS = {'HEM', 'HEA', 'FAD', 'FMN', 'NAD', 'NAP', 'ADP', 'ATP', 'GTP', 'GDP', 'AMP', 'SAM', 'SAH', 'TPP', 'PLP'}
 AMINO_ACIDS = {
     'ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 
