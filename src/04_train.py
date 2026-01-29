@@ -26,11 +26,11 @@ CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints"
 PLOT_DIR = PROJECT_ROOT / "plots"
 RESULTS_DIR = PROJECT_ROOT / "results"
 
-HDF5_FILE = DATA_DIR / "ml_dataset.h5"
+HDF5_FILE = DATA_DIR / "ml_dataset_FINAL.h5"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # --- HYPERPARAMETERS ---
-BATCH_SIZE = 8
+BATCH_SIZE = 16
 EPOCHS = 100
 LR = 2e-4             # Good starting point for Smooth L1
 LIGAND_DIM = 1024
@@ -176,7 +176,7 @@ def main():
     train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, num_workers=8, pin_memory=True)
     val_loader = DataLoader(val_data, batch_size=BATCH_SIZE, shuffle=False, num_workers=8, pin_memory=True)
     
-    model = SCUNet(in_nc=2, ligand_dim=LIGAND_DIM).to(DEVICE)
+    model = SCUNet(in_nc=2, ligand_dim=LIGAND_DIM, window_size=4).to(DEVICE)
     if gpu_count > 1: model = nn.DataParallel(model)
     
     optimizer = optim.AdamW(model.parameters(), lr=LR)
