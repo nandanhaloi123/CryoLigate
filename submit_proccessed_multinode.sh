@@ -11,7 +11,7 @@
 #SBATCH -J Train
 
 # queue
-#SBATCH -p lindahl5
+#SBATCH -p lindahl4,lindahl5,lindahl3
 
 echo "Starting Job Array ID: $SLURM_ARRAY_TASK_ID"
 echo "Running on node: $(hostname)"

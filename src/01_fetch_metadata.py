@@ -68,7 +68,7 @@ AMINO_ACIDS = {
     'MSE', 'SEP', 'TPO', 'PTR', 'PCA'
 }
 BUFFERS_SOLVENTS = {'HOH', 'DOD', 'EDO', 'GOL', 'PEG', 'PG4', 'PGE', 'MES', 'HEPES', 'TRIS', 'EPE', 'ACY', 'FMT', 'ACT'}
-EXCLUDE_LIST = IONS | BUFFERS_SOLVENTS | SUGARS
+EXCLUDE_LIST = IONS | BUFFERS_SOLVENTS | SUGARS | LIPIDS_DETERGENTS
 
 # ----------------------------
 # HELPER FUNCTIONS
@@ -81,6 +81,7 @@ def classify_ligand_smart(row):
     if code in AMINO_ACIDS: return "Amino Acids"
     if code in SUGARS: return "Saccharides"
     if code in COFACTORS: return "Cofactors/Nucleotides"
+    # Note: We check the explicit list first, but RDKit below will catch the rest
     if code in LIPIDS_DETERGENTS: return "Lipids/Detergents"
     if code in IONS: return "Ions (Excluded)"
     if code in BUFFERS_SOLVENTS: return "Buffers/Solvents (Excluded)"
@@ -91,6 +92,7 @@ def classify_ligand_smart(row):
             if mol:
                 mw = Descriptors.MolWt(mol)
                 rot_bonds = rdMolDescriptors.CalcNumRotatableBonds(mol)
+                # Heuristic: Long flexible chains are usually lipids/detergents
                 if rot_bonds > 12 and mw > 250: return "Lipids/Detergents"
                 if mw < 300: return "Fragments/Metabolites"
         except: pass 
@@ -187,7 +189,7 @@ def main():
     
     valid_pdb_set = get_pdbs_by_resolution_and_method(max_res=RESOLUTION_CUTOFF)
     
-    # 1. LOAD EVERYTHING (No Oligomer Restriction yet, just Method/Res/Lists)
+    # 1. LOAD EVERYTHING (Initial rough filter)
     clean_df = df[
         (df['entry_determination_method'] == 'ELECTRON MICROSCOPY') &
         (df['ligand_is_oligo']==False) &
@@ -195,19 +197,27 @@ def main():
         (df['entry_pdb_id_norm'].isin(valid_pdb_set)) 
     ].copy()
 
-    print(" Classifying ligands...")
+    print(" Classifying ligands (RDKit Smart Check)...")
     clean_df['assigned_class'] = clean_df.apply(classify_ligand_smart, axis=1)
 
+    # ---------------------------------------------------------
+    # CRITICAL FIX: Filter based on the 'Smart' Classification
+    # This removes anything RDKit identified as a lipid, even if 
+    # it wasn't in our hardcoded exclusion list.
+    # ---------------------------------------------------------
+    initial_count = len(clean_df)
+    clean_df = clean_df[clean_df['assigned_class'] != 'Lipids/Detergents']
+    removed_count = initial_count - len(clean_df)
+    print(f" [FILTER] Removed {removed_count} additional lipids detected by RDKit logic.")
+    # ---------------------------------------------------------
+
     # --- PLOTS BEFORE BALANCING ---
-    # This reflects the "Wild West" before we enforce 50 limit or oligomer limit
     print(" Generating 'Before' plots...")
     plot_class_pie_chart(clean_df.sample(min(10000, len(clean_df))), PIE_CHART_BEFORE, "Before Balancing")
     plot_ligand_distribution(clean_df, LIGAND_PLOT_BEFORE, "Top 20 Ligands (Before)")
     save_statistics(clean_df, STATS_BEFORE)
 
     # --- OVERSAMPLING ---
-    # We grab 3x the target (150) blindly from this pool. 
-    # This creates a "candidates list" that we will then scrutinize for oligomer state.
     print(f" Oversampling: Selecting {TARGET_SAMPLES_PER_LIGAND * OVERSAMPLE_FACTOR} candidates per ligand...")
     
     unique_combinations = clean_df.drop_duplicates(subset=['ligand_ccd_code', 'entry_pdb_id_norm'])
@@ -230,39 +240,32 @@ def main():
             emdb_map[pid] = emdb
 
     # --- PLOT OLIGOMERS (ALL) ---
-    # You asked to visualize ALL oligomeric states found
     print(" Generating Oligomer Distribution plot (All Fetched Data)...")
     all_values = list(olig_states.values())
     plot_oligomer_distribution(all_values, OLIGO_PLOT_ALL)
 
-    # --- FILTERING & BALANCING (THE SIEVE) ---
+    # --- FILTERING & BALANCING ---
     print(f" Filtering & Capping to max {TARGET_SAMPLES_PER_LIGAND} valid structures per ligand...")
     
     final_rows = []
     ligand_counters = Counter()
     
-    # Iterate through the oversampled list. 
-    # Since we used .sample(), the order is random.
     for _, row in tqdm(oversampled_df.iterrows(), total=len(oversampled_df)):
         ligand = row['ligand_ccd_code']
         pdb_id = row['entry_pdb_id_norm']
         
-        # 1. STOP if we already have 50 good ones for this ligand
         if ligand_counters[ligand] >= TARGET_SAMPLES_PER_LIGAND:
             continue
             
-        # 2. CHECK Oligomer State
+        # CHECK Oligomer State
         olig = olig_states.get(pdb_id, "N/A")
         
         if isinstance(olig, (int, float)):
             if olig > MAX_OLIGOMERIC_STATE:
-                continue # REJECT: Too big
+                continue 
         elif olig == "N/A":
-             # Decision: Keep N/A (usually smaller) or discard. 
-             # We will keep for now to maximize data, assuming N/A isn't a giant virus capsid.
              pass 
 
-        # 3. ACCEPT
         final_rows.append({
             "PDB_ID": pdb_id,
             "Ligand_Names": ligand, 
@@ -280,7 +283,6 @@ def main():
     print(" Generating 'After' plots (Final Valid Dataset)...")
     plot_class_pie_chart(final_df_flat.rename(columns={'Class': 'assigned_class'}), PIE_CHART_AFTER, "After Balancing")
     
-    # Custom Bar Plot for 'After' (since columns changed)
     counts = final_df_flat['Ligand_Names'].value_counts().reset_index()
     counts.columns = ['ligand_ccd_code', 'count']
     plt.figure(figsize=(12, 6))
@@ -292,7 +294,6 @@ def main():
     counts.to_csv(STATS_AFTER, index=False)
 
     # --- SAVE FILES ---
-    # We must aggregate again because one PDB might have multiple ligands in our final set
     grouped_final = final_df_flat.groupby('PDB_ID')
     
     pdb_out, lig_out, smiles_out, res_out, olig_out, emdb_out = [], [], [], [], [], []
@@ -306,7 +307,6 @@ def main():
         olig = group.iloc[0]['Oligomeric_State']
         emdb = group.iloc[0]['EMDB_IDs']
 
-        # Prepare for NPZ
         pdb_out.append(pid)
         lig_out.append(unique_ligs)
         smiles_out.append(unique_smiles)
@@ -314,7 +314,6 @@ def main():
         olig_out.append(olig)
         emdb_out.append(emdb)
 
-        # Prepare for Excel
         excel_data.append({
             "PDB_ID": pid,
             "Ligand_Names": ",".join(unique_ligs),

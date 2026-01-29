@@ -9,6 +9,9 @@ import threading
 import h5py
 import random
 import math
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 from pathlib import Path
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
@@ -35,37 +38,60 @@ RAW_DATA_DIR = PROJECT_ROOT / "data" / "raw"
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 METADATA_FILE = PROJECT_ROOT / "data" / "metadata" / "pdb_em_metadata_balanced.npz"
 
+# NEW: Output for stats
+STATS_EXCEL = PROCESSED_DIR / f"processing_stats_node_{args.node_id}.xlsx"
+DISTRIBUTION_PLOT = PROCESSED_DIR / f"final_distribution_node_{args.node_id}.png"
+
 # ----------------------------
 # PARAMETERS
 # ----------------------------
-TEST_LIMIT = None      
+TEST_LIMIT = None         
 MAX_WORKERS = 4           
 ONLY_TEST_AMINO_ACIDS = False  
 AMINO_ACIDS = {
     'ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 
     'LEU', 'LYS', 'MET', 'PHE', 'PRO', 'SER', 'THR', 'TRP', 'TYR', 'VAL'
 }
-TARGET_VOXEL_SIZE = 0.5   
-GRID_SIZE = 96            
+TARGET_VOXEL_SIZE = 0.5 
+GRID_SIZE = 64            # 32 Angstrom Box
 SYNTHETIC_RESOLUTION = 4.0 
 NUM_CHANNELS = 2
 
-# --- NEW: DISTANCE THRESHOLD ---
-INTERFERENCE_DIST_THRESHOLD = 5.0 # Angstroms (Only skip if closer than this)
+# Max diameter allowed. 
+MAX_LIGAND_DIAMETER = (GRID_SIZE * TARGET_VOXEL_SIZE) - 4.0 
 
-# --- IGNORE COMMON IONS/BUFFERS ---
+# --- EXPANDED IGNORE LIST ---
 IGNORED_LIGANDS = {
-    "HOH", "DOD", "WAT", # Water
-    "NA", "MG", "CL", "ZN", "MN", "CA", "K", "FE", "CU", "NI", # Ions
-    "SO4", "PO4", "ACT", "GOL", "PEG", "EDO" # Buffers
+    "HOH", "DOD", "WAT", 
+    "NA", "MG", "CL", "ZN", "MN", "CA", "K", "FE", "CU", "NI", "CO", "CD", "HG", "IOD",
+    "SO4", "PO4", "ACT", "GOL", "PEG", "EDO", "DMS", "FMT", "ACY",
+    "OLA", "OLC", "MYR", "MYA", "PAL", "PLM", "STE",
+    "POP", "POPC", "DLPE", "DPPC", "DMPC", 
+    "BOG", "BGC", "DDM", "LMT", "NGP", "TRX", "LDA", "UD1", "HTG",
+    "CHL", "CLR", "NAG", "MAN", "BMA", "FUC" 
 }
 
 h5_lock = threading.Lock()
+stats_lock = threading.Lock()
 global_write_index = 0
+
+# --- STATS TRACKING CONTAINERS ---
+# Format: { 'PDB_ID': {'saved_count': 0, 'removed_count': 0, 'saved_names': [], 'removed_names': []} }
+processing_stats = {}
+# Format: Counter for saved ligands to generate plot
+saved_ligand_counter = {}
 
 # ----------------------------
 # HELPER FUNCTIONS
 # ----------------------------
+
+def get_max_diameter(atoms):
+    """Calculates the maximum distance between any two atoms in the list."""
+    coords = np.array([[a.pos.x, a.pos.y, a.pos.z] for a in atoms])
+    if len(coords) < 2: return 0.0
+    diff = coords[:, np.newaxis, :] - coords[np.newaxis, :, :]
+    dists = np.sqrt(np.sum(diff**2, axis=-1))
+    return np.max(dists)
 
 def generate_synthetic_map(atoms, origin_angstroms, box_size, voxel_size, resolution):
     grid = np.zeros((box_size, box_size, box_size), dtype=np.float32)
@@ -88,34 +114,45 @@ def generate_synthetic_map(atoms, origin_angstroms, box_size, voxel_size, resolu
         density = np.tanh(density / (peak_approx * 0.3 + 1e-6))
     return density
 
-def check_ligand_interference(target_res, all_het_residues, dist_threshold=6.0):
-    """
-    Checks if any atom from 'all_het_residues' is within 'dist_threshold' Angstroms
-    of ANY atom in the target ligand.
-    """
-    # 1. Extract Target Coordinates
-    target_coords = np.array([[a.pos.x, a.pos.y, a.pos.z] for a in target_res])
-    
-    for other_res in all_het_residues:
-        # Skip Self
-        if other_res is target_res:
-            continue
-            
-        # 2. Extract Other Coordinates
-        other_coords = np.array([[a.pos.x, a.pos.y, a.pos.z] for a in other_res])
-        
-        # 3. Calculate Distances (Vectorized)
-        # Using broadcasting to check all-vs-all atoms between the two molecules
-        # Shape: (num_target_atoms, 1, 3) - (1, num_other_atoms, 3)
-        diff = target_coords[:, np.newaxis, :] - other_coords[np.newaxis, :, :]
-        dists = np.sqrt(np.sum(diff**2, axis=2))
-        
-        # 4. Check if ANY pair is too close
-        min_dist = np.min(dists)
-        if min_dist < dist_threshold:
-            return True, f"{other_res.name} (Seq: {other_res.seqid.num}) is {min_dist:.1f}A away"
+def check_ligand_interference_strict(target_res, all_het_residues, phys_origin, box_dims_angstrom):
+    box_min = phys_origin
+    box_max = phys_origin + box_dims_angstrom
+    buffer = 1.0 
+    box_min -= buffer
+    box_max += buffer
 
+    for other_res in all_het_residues:
+        if other_res is target_res: continue
+        for atom in other_res:
+            pos = np.array([atom.pos.x, atom.pos.y, atom.pos.z])
+            if np.all(pos >= box_min) and np.all(pos <= box_max):
+                return True, f"{other_res.name} (Seq: {other_res.seqid.num}) found inside crop box"
     return False, None
+
+def update_stats(pdb_id, status, ligand_name):
+    """Thread-safe update of statistics."""
+    with stats_lock:
+        if pdb_id not in processing_stats:
+            processing_stats[pdb_id] = {
+                'saved_count': 0, 
+                'removed_count': 0, 
+                'saved_names': [], 
+                'removed_names': []
+            }
+        
+        if status == "SAVED":
+            processing_stats[pdb_id]['saved_count'] += 1
+            processing_stats[pdb_id]['saved_names'].append(ligand_name)
+            
+            # Update global counter for plotting
+            if ligand_name in saved_ligand_counter:
+                saved_ligand_counter[ligand_name] += 1
+            else:
+                saved_ligand_counter[ligand_name] = 1
+                
+        elif status == "REMOVED":
+            processing_stats[pdb_id]['removed_count'] += 1
+            processing_stats[pdb_id]['removed_names'].append(ligand_name)
 
 # ----------------------------
 # PROCESSOR
@@ -124,6 +161,11 @@ def process_task(task, h5file, pbar):
     global global_write_index
     pdb_id, struct_path, map_path, target_ccd, target_smiles = task
     
+    if target_ccd in IGNORED_LIGANDS:
+        update_stats(pdb_id, "REMOVED", f"{target_ccd} (Ignored List)")
+        pbar.update(1)
+        return
+
     output_subdir = PROCESSED_DIR / pdb_id.lower()
     output_subdir.mkdir(parents=True, exist_ok=True)
 
@@ -135,61 +177,65 @@ def process_task(task, h5file, pbar):
         protein_atoms = []
         all_het_residues = [] 
 
-        # 1. First Pass: Collect everything
         for chain in model:
             for res in chain:
                 if res.het_flag == 'H':
-                    # Only add to "Potential Interferences" if NOT in ignore list
-                    if res.name not in IGNORED_LIGANDS:
+                    if res.name not in ["HOH", "DOD", "WAT"]:
                         all_het_residues.append(res)
-                    
                     if res.name == target_ccd:
                         target_residues.append(res)
-                
                 elif res.het_flag == 'A':
                     for atom in res:
                         protein_atoms.append(atom)
 
-        if not target_residues: return
+        if not target_residues: 
+            update_stats(pdb_id, "REMOVED", f"{target_ccd} (Not found in PDB)")
+            pbar.update(1)
+            return
 
-        # 2. Read Map
         m = gemmi.read_ccp4_map(str(map_path))
         m.setup(0.0, gemmi.MapSetup.Full)
         grid = resample_em_map(m.grid, TARGET_VOXEL_SIZE)
         del m  
         
-        # 3. Process Target Ligands
         for i, lig_res in enumerate(target_residues, 1):
+            unique_lig_name = f"{target_ccd}_{i}"
             try:
                 ligand_atoms = list(lig_res)
+                
+                # SIZE CHECK
+                diameter = get_max_diameter(ligand_atoms)
+                if diameter > MAX_LIGAND_DIAMETER:
+                    print(f"[{pdb_id}] SKIPPED {unique_lig_name}: Too large")
+                    update_stats(pdb_id, "REMOVED", f"{unique_lig_name} (Too Large)")
+                    continue
+
                 lig_coords = np.array([[a.pos.x, a.pos.y, a.pos.z] for a in ligand_atoms])
                 centroid = np.mean(lig_coords, axis=0)
 
-                # --- INTERFERENCE CHECK (DISTANCE BASED) ---
-                has_interference, reason = check_ligand_interference(
-                    lig_res, 
-                    all_het_residues, 
-                    dist_threshold=INTERFERENCE_DIST_THRESHOLD
-                )
-                
-                if has_interference:
-                    print(f"[{pdb_id}] SKIPPED {target_ccd}_{i}: Reason -> {reason}")
-                    continue
-                # -------------------------------------------
-                
-                all_atoms = protein_atoms + ligand_atoms
-                
                 center_idx = coord_to_grid_index(centroid, grid)
                 half = GRID_SIZE // 2
                 start_idx = center_idx - half
                 start_idx = np.clip(start_idx, [0, 0, 0], np.array(grid.shape) - GRID_SIZE)
-
-                density = grid.get_subarray(start_idx.tolist(), [GRID_SIZE, GRID_SIZE, GRID_SIZE]).astype(np.float32)
                 
                 frac_origin = gemmi.Fractional(start_idx[0]/grid.nu, start_idx[1]/grid.nv, start_idx[2]/grid.nw)
                 phys_origin_vec = grid.unit_cell.orthogonalize(frac_origin)
                 phys_origin = np.array([phys_origin_vec.x, phys_origin_vec.y, phys_origin_vec.z], dtype=np.float32)
+                
+                box_dims = np.array([GRID_SIZE * TARGET_VOXEL_SIZE] * 3) 
 
+                has_interference, reason = check_ligand_interference_strict(
+                    lig_res, all_het_residues, phys_origin, box_dims
+                )
+                
+                if has_interference:
+                    print(f"[{pdb_id}] SKIPPED {unique_lig_name}: {reason}")
+                    update_stats(pdb_id, "REMOVED", f"{unique_lig_name} (Interference)")
+                    continue
+                
+                # --- GENERATE DATA ---
+                all_atoms = protein_atoms + ligand_atoms
+                density = grid.get_subarray(start_idx.tolist(), [GRID_SIZE, GRID_SIZE, GRID_SIZE]).astype(np.float32)
                 synthetic_density = generate_synthetic_map(all_atoms, phys_origin, GRID_SIZE, TARGET_VOXEL_SIZE, SYNTHETIC_RESOLUTION)
                 
                 synthetic_density = (synthetic_density - np.mean(synthetic_density)) / (np.std(synthetic_density) + 1e-6)
@@ -209,13 +255,13 @@ def process_task(task, h5file, pbar):
                 
                 mask = (data[1] > 0).astype(np.uint8)
 
-                out_mrc = output_subdir / f"ml_map_{target_ccd}_{i}.mrc"
+                # Save intermediate files
+                out_mrc = output_subdir / f"ml_map_{unique_lig_name}.mrc"
                 save_mrc_with_origin(density.T, out_mrc, TARGET_VOXEL_SIZE, phys_origin)
-                
-                out_syn_mrc = output_subdir / f"ml_gt_{target_ccd}_{i}.mrc"
+                out_syn_mrc = output_subdir / f"ml_gt_{unique_lig_name}.mrc"
                 save_mrc_with_origin(synthetic_density.T, out_syn_mrc, TARGET_VOXEL_SIZE, phys_origin)
                 
-                pdb_out_path = output_subdir / f"{pdb_id}_{target_ccd}_{i}_clean.pdb"
+                pdb_out_path = output_subdir / f"{pdb_id}_{unique_lig_name}_clean.pdb"
                 new_st = gemmi.Structure()
                 new_model = gemmi.Model("1")
                 new_chain = gemmi.Chain("A")
@@ -227,7 +273,6 @@ def process_task(task, h5file, pbar):
                 with h5_lock:
                     idx = global_write_index
                     global_write_index += 1
-                    
                     h5file['maps'][idx] = data
                     h5file['exp_density'][idx] = density
                     h5file['ground_truth_maps'][idx] = synthetic_density
@@ -239,14 +284,16 @@ def process_task(task, h5file, pbar):
                     h5file['crop_start_voxel'][idx] = start_idx
                     h5file['physical_origin'][idx] = phys_origin
 
+                update_stats(pdb_id, "SAVED", target_ccd)
                 pbar.set_description(f"Processing (Saved: {global_write_index})")
 
-            except Exception as e:
-                # print(f"[{pdb_id}] Inner loop error: {e}")
+            except Exception:
+                update_stats(pdb_id, "REMOVED", f"{unique_lig_name} (Error)")
                 pass 
 
     except Exception as e:
         print(f"Error {pdb_id}: {e}")
+        update_stats(pdb_id, "REMOVED", "Entire PDB Failed")
     finally:
         pbar.update(1)
 
@@ -293,8 +340,8 @@ if __name__ == "__main__":
         if struct_files and map_files:
             possible_ccds, possible_smiles = meta_lookup[pdb_id]
             for ccd, smi in zip(possible_ccds, possible_smiles):
-                if ONLY_TEST_AMINO_ACIDS:
-                    if ccd not in AMINO_ACIDS: continue 
+                if ONLY_TEST_AMINO_ACIDS and ccd not in AMINO_ACIDS: continue 
+                if ccd in IGNORED_LIGANDS: continue
                 valid_tasks.append((pdb_id, struct_files[0], map_files[0], ccd, smi))
                 if TEST_LIMIT is not None and len(valid_tasks) >= TEST_LIMIT: break 
 
@@ -325,5 +372,47 @@ if __name__ == "__main__":
         print(f"\nNode {args.node_id}: Complete. Saved {final_count} instances.")
         for key in h5.keys():
             h5[key].resize(final_count, axis=0)
+
+    # ----------------------------
+    # STATS GENERATION
+    # ----------------------------
+    print(f"Node {args.node_id}: Generating statistics files...")
+    
+    # 1. Create DataFrame from processing stats
+    stats_list = []
+    for pid, data in processing_stats.items():
+        stats_list.append({
+            "PDB_ID": pid,
+            "Saved_Count": data['saved_count'],
+            "Removed_Count": data['removed_count'],
+            "Saved_Ligands": ", ".join(data['saved_names']),
+            "Removed_Ligands": ", ".join(data['removed_names'])
+        })
+    
+    stats_df = pd.DataFrame(stats_list)
+    stats_df.to_excel(STATS_EXCEL, index=False)
+    print(f"Saved detailed stats to {STATS_EXCEL}")
+
+    # 2. Generate Distribution Plot
+    if saved_ligand_counter:
+        plt.figure(figsize=(12, 6))
+        
+        # Sort by count and take top 30
+        sorted_counts = sorted(saved_ligand_counter.items(), key=lambda x: x[1], reverse=True)
+        top_n = min(30, len(sorted_counts))
+        top_counts = sorted_counts[:top_n]
+        
+        labels, values = zip(*top_counts)
+        
+        sns.barplot(x=list(labels), y=list(values), palette='viridis')
+        plt.title(f"Top {top_n} Saved Ligands (Node {args.node_id})")
+        plt.xlabel("Ligand Name")
+        plt.ylabel("Count")
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.savefig(DISTRIBUTION_PLOT)
+        print(f"Saved distribution plot to {DISTRIBUTION_PLOT}")
+    else:
+        print("No ligands saved, skipping plot generation.")
 
     print(f"Dataset part saved: {OUTPUT_H5}")
