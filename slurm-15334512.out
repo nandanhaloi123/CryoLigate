@@ -1,0 +1,122 @@
+/home/x_nanha/.conda/envs/CryoLigate/lib/python3.9/site-packages/timm/models/layers/__init__.py:49: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+--- Initializing Training on cuda ---
+Available GPUs: 4
+Loss Config: SmoothL1 (Weight=500.0) + SSIM (Weight=0.2)
+
+--- Starting Epochs ---
+Epoch 001 | Train: 0.38694 | Val: 0.29024 | Ligand MSE: 0.47707
+Epoch 002 | Train: 0.27641 | Val: 0.24635 | Ligand MSE: 0.45939
+Epoch 003 | Train: 0.24852 | Val: 0.23522 | Ligand MSE: 0.39885
+Epoch 004 | Train: 0.22388 | Val: 0.24802 | Ligand MSE: 0.43454
+Epoch 005 | Train: 0.22157 | Val: 0.18417 | Ligand MSE: 0.45280
+Epoch 006 | Train: 0.22005 | Val: 0.16947 | Ligand MSE: 0.38530
+Epoch 007 | Train: 0.17562 | Val: 0.12004 | Ligand MSE: 0.31318
+Epoch 008 | Train: 0.18510 | Val: 0.11301 | Ligand MSE: 0.33130
+Epoch 009 | Train: 0.15236 | Val: 0.19959 | Ligand MSE: 0.30866
+Epoch 010 | Train: 0.13934 | Val: 0.09133 | Ligand MSE: 0.34595
+Epoch 011 | Train: 0.14516 | Val: 0.07569 | Ligand MSE: 0.28637
+Epoch 012 | Train: 0.12737 | Val: 0.11602 | Ligand MSE: 0.28704
+Epoch 013 | Train: 0.11837 | Val: 0.07247 | Ligand MSE: 0.31853
+Epoch 014 | Train: 0.14181 | Val: 0.16202 | Ligand MSE: 0.30092
+Epoch 015 | Train: 0.12731 | Val: 0.12075 | Ligand MSE: 0.28909
+Epoch 016 | Train: 0.10453 | Val: 0.06299 | Ligand MSE: 0.29362
+Epoch 017 | Train: 0.10038 | Val: 0.14199 | Ligand MSE: 0.29521
+Epoch 018 | Train: 0.10117 | Val: 0.08711 | Ligand MSE: 0.29312
+Epoch 019 | Train: 0.10388 | Val: 0.13129 | Ligand MSE: 0.28954
+Epoch 020 | Train: 0.10964 | Val: 0.06322 | Ligand MSE: 0.30039
+Epoch 021 | Train: 0.09495 | Val: 0.05967 | Ligand MSE: 0.31218
+Epoch 022 | Train: 0.08830 | Val: 0.10413 | Ligand MSE: 0.30583
+Epoch 023 | Train: 0.11440 | Val: 0.10843 | Ligand MSE: 0.33178
+Epoch 024 | Train: 0.07839 | Val: 0.05494 | Ligand MSE: 0.27962
+Epoch 025 | Train: 0.07800 | Val: 0.10082 | Ligand MSE: 0.32149
+Epoch 026 | Train: 0.08202 | Val: 0.07182 | Ligand MSE: 0.30340
+Epoch 027 | Train: 0.07936 | Val: 0.10022 | Ligand MSE: 0.33680
+Epoch 028 | Train: 0.09349 | Val: 0.10373 | Ligand MSE: 0.30857
+Epoch 029 | Train: 0.06983 | Val: 0.05373 | Ligand MSE: 0.35106
+Epoch 030 | Train: 0.08402 | Val: 0.08292 | Ligand MSE: 0.32112
+Epoch 031 | Train: 0.07776 | Val: 0.08355 | Ligand MSE: 0.31286
+Epoch 032 | Train: 0.07322 | Val: 0.05379 | Ligand MSE: 0.32004
+Epoch 033 | Train: 0.07044 | Val: 0.06329 | Ligand MSE: 0.32820
+Epoch 034 | Train: 0.08593 | Val: 0.06683 | Ligand MSE: 0.29748
+Epoch 035 | Train: 0.05730 | Val: 0.05819 | Ligand MSE: 0.36748
+Epoch 036 | Train: 0.06199 | Val: 0.04386 | Ligand MSE: 0.31470
+Epoch 037 | Train: 0.05126 | Val: 0.04406 | Ligand MSE: 0.39007
+Epoch 038 | Train: 0.04706 | Val: 0.04826 | Ligand MSE: 0.32386
+Epoch 039 | Train: 0.04311 | Val: 0.04578 | Ligand MSE: 0.33736
+Epoch 040 | Train: 0.04955 | Val: 0.05797 | Ligand MSE: 0.33135
+Epoch 041 | Train: 0.05534 | Val: 0.03867 | Ligand MSE: 0.32465
+Epoch 042 | Train: 0.04485 | Val: 0.06013 | Ligand MSE: 0.34211
+Epoch 043 | Train: 0.04114 | Val: 0.05326 | Ligand MSE: 0.33749
+Epoch 044 | Train: 0.03853 | Val: 0.06829 | Ligand MSE: 0.34736
+Epoch 045 | Train: 0.04846 | Val: 0.07587 | Ligand MSE: 0.33475
+Epoch 046 | Train: 0.05212 | Val: 0.04373 | Ligand MSE: 0.37819
+Epoch 047 | Train: 0.04245 | Val: 0.05823 | Ligand MSE: 0.33927
+Epoch 048 | Train: 0.03454 | Val: 0.04566 | Ligand MSE: 0.33247
+Epoch 049 | Train: 0.02979 | Val: 0.03958 | Ligand MSE: 0.35248
+Epoch 050 | Train: 0.03094 | Val: 0.04322 | Ligand MSE: 0.35859
+Epoch 051 | Train: 0.03153 | Val: 0.03742 | Ligand MSE: 0.35909
+Epoch 052 | Train: 0.02808 | Val: 0.03718 | Ligand MSE: 0.36421
+Epoch 053 | Train: 0.02853 | Val: 0.06475 | Ligand MSE: 0.34361
+Epoch 054 | Train: 0.03443 | Val: 0.04031 | Ligand MSE: 0.35802
+Epoch 055 | Train: 0.03006 | Val: 0.03688 | Ligand MSE: 0.35695
+Epoch 056 | Train: 0.02900 | Val: 0.04894 | Ligand MSE: 0.36720
+Epoch 057 | Train: 0.02666 | Val: 0.03623 | Ligand MSE: 0.36635
+Epoch 058 | Train: 0.02670 | Val: 0.03521 | Ligand MSE: 0.38266
+Epoch 059 | Train: 0.03124 | Val: 0.06299 | Ligand MSE: 0.38416
+Epoch 060 | Train: 0.04075 | Val: 0.05873 | Ligand MSE: 0.38101
+Epoch 061 | Train: 0.03472 | Val: 0.03873 | Ligand MSE: 0.37574
+Epoch 062 | Train: 0.03049 | Val: 0.04967 | Ligand MSE: 0.42929
+Epoch 063 | Train: 0.02923 | Val: 0.03839 | Ligand MSE: 0.39678
+Epoch 064 | Train: 0.02872 | Val: 0.03815 | Ligand MSE: 0.34956
+Epoch 065 | Train: 0.02397 | Val: 0.03397 | Ligand MSE: 0.37321
+Epoch 066 | Train: 0.02378 | Val: 0.03384 | Ligand MSE: 0.38732
+Epoch 067 | Train: 0.02198 | Val: 0.03470 | Ligand MSE: 0.37997
+Epoch 068 | Train: 0.02319 | Val: 0.03372 | Ligand MSE: 0.39917
+Epoch 069 | Train: 0.02197 | Val: 0.03560 | Ligand MSE: 0.38472
+Epoch 070 | Train: 0.02160 | Val: 0.03347 | Ligand MSE: 0.39366
+Epoch 071 | Train: 0.02276 | Val: 0.03506 | Ligand MSE: 0.39768
+Epoch 072 | Train: 0.02116 | Val: 0.03507 | Ligand MSE: 0.38848
+Epoch 073 | Train: 0.02147 | Val: 0.03412 | Ligand MSE: 0.41036
+Epoch 074 | Train: 0.02079 | Val: 0.03419 | Ligand MSE: 0.39941
+Epoch 075 | Train: 0.02150 | Val: 0.03359 | Ligand MSE: 0.42196
+Epoch 076 | Train: 0.02101 | Val: 0.03713 | Ligand MSE: 0.39525
+Epoch 077 | Train: 0.01954 | Val: 0.03549 | Ligand MSE: 0.40747
+Epoch 078 | Train: 0.01889 | Val: 0.03401 | Ligand MSE: 0.41737
+Epoch 079 | Train: 0.01889 | Val: 0.03435 | Ligand MSE: 0.41925
+Epoch 080 | Train: 0.01869 | Val: 0.03370 | Ligand MSE: 0.42065
+Epoch 081 | Train: 0.01862 | Val: 0.03370 | Ligand MSE: 0.41833
+Epoch 082 | Train: 0.01844 | Val: 0.03320 | Ligand MSE: 0.41304
+Epoch 083 | Train: 0.01817 | Val: 0.03350 | Ligand MSE: 0.43215
+Epoch 084 | Train: 0.01844 | Val: 0.03402 | Ligand MSE: 0.42744
+Epoch 085 | Train: 0.01833 | Val: 0.03501 | Ligand MSE: 0.43251
+Epoch 086 | Train: 0.01805 | Val: 0.03350 | Ligand MSE: 0.43508
+Epoch 087 | Train: 0.01801 | Val: 0.03406 | Ligand MSE: 0.43406
+Epoch 088 | Train: 0.01765 | Val: 0.03377 | Ligand MSE: 0.44302
+Epoch 089 | Train: 0.01726 | Val: 0.03401 | Ligand MSE: 0.43872
+Epoch 090 | Train: 0.01716 | Val: 0.03374 | Ligand MSE: 0.44496
+Epoch 091 | Train: 0.01706 | Val: 0.03395 | Ligand MSE: 0.44491
+Epoch 092 | Train: 0.01707 | Val: 0.03385 | Ligand MSE: 0.44637
+Epoch 093 | Train: 0.01692 | Val: 0.03416 | Ligand MSE: 0.44682
+Epoch 094 | Train: 0.01683 | Val: 0.03370 | Ligand MSE: 0.43815
+Epoch 095 | Train: 0.01662 | Val: 0.03380 | Ligand MSE: 0.44858
+Epoch 096 | Train: 0.01657 | Val: 0.03386 | Ligand MSE: 0.44765
+Epoch 097 | Train: 0.01652 | Val: 0.03385 | Ligand MSE: 0.45310
+Epoch 098 | Train: 0.01651 | Val: 0.03409 | Ligand MSE: 0.45343
+Epoch 099 | Train: 0.01643 | Val: 0.03394 | Ligand MSE: 0.45218
+Epoch 100 | Train: 0.01641 | Val: 0.03408 | Ligand MSE: 0.45342
+
+--- Exporting Verification Samples ---
+--- Exporting 5 samples to /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/results/predictions_train ---
+   Saved 6rev
+   Saved 6xl6
+   Saved 8etr
+   Saved 7tpg
+   Saved 7pl9
+--- Exporting 5 samples to /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/results/predictions_val ---
+   Saved 6xlj
+   Saved 7pw4
+   Saved 6pus
+   Saved 8gfw
+   Saved 7cyf
+Done. Check /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/results/predictions_val
