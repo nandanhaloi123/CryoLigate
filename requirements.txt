@@ -15,3 +15,4 @@ openpyxl
 scipy
 matplotlib
 seaborn
+wandb
