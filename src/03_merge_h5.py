@@ -14,7 +14,7 @@ from collections import Counter
 # ----------------------------
 try:
     # This imports the function from your util.py in the same folder
-    from utils_common import get_ligand_class_by_name
+    from util import get_ligand_class_by_name
 except ImportError:
     print("WARNING: Could not import 'util.py'. Make sure it is in the same directory.")
     # Fallback dummy function if util is missing
