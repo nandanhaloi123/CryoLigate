@@ -1,0 +1,61 @@
+/home/x_nanha/.conda/envs/CryoLigate/lib/python3.9/site-packages/timm/models/layers/__init__.py:49: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /home/x_nanha/.netrc.
+wandb: Currently logged in as: nandanhaloi123 (nandanhaloi123-kth-royal-institute-of-technology) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run nirv5z00
+wandb: Tracking run with wandb version 0.24.2
+wandb: Run data is saved locally in /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/wandb/run-20260212_164737-nirv5z00
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run run_20260212_164734
+wandb: ⭐️ View project at https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting
+wandb: 🚀 View run at https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting/runs/nirv5z00
+--- Training run_20260212_164734 on cuda ---
+--- Results saving to: /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/results/run_20260212_164734 ---
+wandb: WARNING Saving files without folders. If you want to preserve subdirectories pass base_path to wandb.save, i.e. wandb.save("/mnt/folder/file.h5", base_path="/mnt")
+wandb: WARNING Symlinked 1 file into the W&B run directory; call wandb.save again to sync new files.
+wandb: updating run metadata
+wandb: uploading config.yaml; uploading run_20260212_164734/best_model.pth; uploading output.log; uploading wandb-summary.json
+wandb: uploading run_20260212_164734/best_model.pth
+wandb: 
+wandb: Run history:
+wandb:      epoch ▁
+wandb: masked_mse ▁
+wandb: train_loss ▁
+wandb:   val_loss ▁
+wandb: 
+wandb: Run summary:
+wandb:      epoch 0
+wandb: masked_mse 0.46297
+wandb: train_loss 0.38144
+wandb:   val_loss 0.30784
+wandb: 
+wandb: 🚀 View run run_20260212_164734 at: https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting/runs/nirv5z00
+wandb: ⭐️ View project at: https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting
+wandb: Synced 5 W&B file(s), 0 media file(s), 0 artifact file(s) and 1 other file(s)
+wandb: Find logs at: ./wandb/run-20260212_164737-nirv5z00/logs
+Epoch 001 | Train: 0.38144 | Val: 0.30784 | PocketMSE: 0.46297
+   --> Updated plot: /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/results/run_20260212_164734/training_metrics.png
+   >>> New Best Model! Saving checkpoint & predictions...
+
+--- Finalizing. Results in /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/results/run_20260212_164734 ---
+   --> Updated plot: /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/results/run_20260212_164734/final_training_metrics.png
+Traceback (most recent call last):
+  File "/proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/src/04_train.py", line 290, in <module>
+    main()
+  File "/proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/src/04_train.py", line 278, in main
+    save_mrc_samples(model, val_data, "predictions_val_best", DEVICE)
+  File "/proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/src/04_train.py", line 174, in save_mrc_samples
+    save_mrc_with_origin(pred_np.T, output_dir / f"{base}_pred.mrc", CONFIG['voxel_size'], phys_origin)
+  File "/proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/src/utils_common.py", line 52, in save_mrc_with_origin
+    mrc.header.cella.x = unit_cell.a
+AttributeError: 'float' object has no attribute 'a'
+Traceback (most recent call last):
+  File "/proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/src/04_train.py", line 290, in <module>
+    main()
+  File "/proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/src/04_train.py", line 278, in main
+    save_mrc_samples(model, val_data, "predictions_val_best", DEVICE)
+  File "/proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/src/04_train.py", line 174, in save_mrc_samples
+    save_mrc_with_origin(pred_np.T, output_dir / f"{base}_pred.mrc", CONFIG['voxel_size'], phys_origin)
+  File "/proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/src/utils_common.py", line 52, in save_mrc_with_origin
+    mrc.header.cella.x = unit_cell.a
+AttributeError: 'float' object has no attribute 'a'

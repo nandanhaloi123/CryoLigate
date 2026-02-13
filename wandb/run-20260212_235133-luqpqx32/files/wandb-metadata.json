@@ -1,0 +1,99 @@
+{
+  "os": "Linux-4.18.0-553.94.1.el8_10.x86_64-x86_64-with-glibc2.28",
+  "python": "CPython 3.9.23",
+  "startedAt": "2026-02-12T22:51:33.809715Z",
+  "program": "/proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/src/04_train.py",
+  "codePath": "src/04_train.py",
+  "codePathLocal": "src/04_train.py",
+  "git": {
+    "remote": "https://github.com/nandanhaloi123/CryoLigate.git",
+    "commit": "2fe3b2d80059451f74c067ef1c2744b38d418c0a"
+  },
+  "email": "nandanhaloi123@gmail.com",
+  "root": "/proj/berzelius-2022-haloi/users/x_nanha/CryoLigate",
+  "host": "node093",
+  "executable": "/home/x_nanha/.conda/envs/CryoLigate/bin/python",
+  "cpu_count": 128,
+  "cpu_count_logical": 256,
+  "gpu": "NVIDIA A100-SXM4-80GB",
+  "gpu_count": 4,
+  "disk": {
+    "/": {
+      "total": "31317663744",
+      "used": "16990322688"
+    }
+  },
+  "memory": {
+    "total": "2164298833920"
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA A100-SXM4-80GB",
+      "memoryTotal": "85899345920",
+      "cudaCores": 6912,
+      "architecture": "Ampere",
+      "uuid": "GPU-4a7e87ba-330d-16ae-ba84-3a080785099e"
+    },
+    {
+      "name": "NVIDIA A100-SXM4-80GB",
+      "memoryTotal": "85899345920",
+      "cudaCores": 6912,
+      "architecture": "Ampere",
+      "uuid": "GPU-8037dd42-f112-cab1-b7ed-e29e26cba8b7"
+    },
+    {
+      "name": "NVIDIA A100-SXM4-80GB",
+      "memoryTotal": "85899345920",
+      "cudaCores": 6912,
+      "architecture": "Ampere",
+      "uuid": "GPU-cf8dbd04-1e85-8d09-9198-26f3542adb0b"
+    },
+    {
+      "name": "NVIDIA A100-SXM4-80GB",
+      "memoryTotal": "85899345920",
+      "cudaCores": 6912,
+      "architecture": "Ampere",
+      "uuid": "GPU-4daa0f7a-ce94-81bf-271a-1813d264d561"
+    }
+  ],
+  "cudaVersion": "13.0",
+  "slurm": {
+    "cluster_name": "berzelius",
+    "conf": "/etc/slurm/slurm.conf",
+    "cpus_on_node": "64",
+    "gpus": "4",
+    "gpus_on_node": "4",
+    "gtids": "0",
+    "job_account": "berzelius-2025-269",
+    "job_cpus_per_node": "64",
+    "job_end_time": "1771195870",
+    "job_gid": "12600",
+    "job_gpus": "0,2,5,6",
+    "job_id": "15546291",
+    "job_name": "submit_berzelious.sh",
+    "job_nodelist": "node093",
+    "job_num_nodes": "1",
+    "job_partition": "berzelius",
+    "job_qos": "normal",
+    "job_start_time": "1770936666",
+    "job_uid": "12600",
+    "job_user": "x_nanha",
+    "jobid": "15546291",
+    "localid": "0",
+    "mem_per_cpu": "7950",
+    "nnodes": "1",
+    "nodeid": "0",
+    "nodelist": "node093",
+    "oom_kill_step": "0",
+    "prio_process": "0",
+    "procid": "0",
+    "script_context": "prolog_task",
+    "submit_dir": "/proj/berzelius-2022-haloi/users/x_nanha/CryoLigate",
+    "submit_host": "berzelius1.nsc.liu.se",
+    "task_pid": "3082926",
+    "tasks_per_node": "64",
+    "topology_addr": "ibsw[40-41,43-59].ibsw[1-8].node093",
+    "topology_addr_pattern": "switch.switch.node"
+  },
+  "writerId": "kyg9s6cmxej0c0vqbdqothlpodcsidw4"
+}

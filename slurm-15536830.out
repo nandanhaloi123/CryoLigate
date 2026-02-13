@@ -1,0 +1,144 @@
+/home/x_nanha/.conda/envs/CryoLigate/lib/python3.9/site-packages/timm/models/layers/__init__.py:49: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /home/x_nanha/.netrc.
+wandb: Currently logged in as: nandanhaloi123 (nandanhaloi123-kth-royal-institute-of-technology) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run 00m49ghb
+wandb: Tracking run with wandb version 0.24.2
+wandb: Run data is saved locally in /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/wandb/run-20260211_234740-00m49ghb
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run run_20260211_234738
+wandb: ⭐️ View project at https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting
+wandb: 🚀 View run at https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting/runs/00m49ghb
+--- Initializing Training run_20260211_234738 on cuda ---
+wandb: WARNING Saving files without folders. If you want to preserve subdirectories pass base_path to wandb.save, i.e. wandb.save("/mnt/folder/file.h5", base_path="/mnt")
+wandb: WARNING Symlinked 1 file into the W&B run directory; call wandb.save again to sync new files.
+Epoch 001 | Train: 0.39501 | Val: 0.33673 | LigMSE: 0.55996
+Epoch 002 | Train: 0.30362 | Val: 0.25564 | LigMSE: 0.47306
+Epoch 003 | Train: 0.25340 | Val: 0.22382 | LigMSE: 0.56458
+Epoch 004 | Train: 0.23691 | Val: 0.25440 | LigMSE: 0.46598
+Epoch 005 | Train: 0.22386 | Val: 0.24469 | LigMSE: 0.45751
+Epoch 006 | Train: 0.19740 | Val: 0.21520 | LigMSE: 0.37632
+Epoch 007 | Train: 0.15623 | Val: 0.08271 | LigMSE: 0.34245
+Epoch 008 | Train: 0.13337 | Val: 0.10762 | LigMSE: 0.34704
+Epoch 009 | Train: 0.15866 | Val: 0.16722 | LigMSE: 0.36405
+Epoch 010 | Train: 0.15177 | Val: 0.18339 | LigMSE: 0.34940
+Epoch 011 | Train: 0.12322 | Val: 0.09938 | LigMSE: 0.33865
+Epoch 012 | Train: 0.13184 | Val: 0.18287 | LigMSE: 0.34687
+Epoch 013 | Train: 0.13831 | Val: 0.08701 | LigMSE: 0.33264
+Epoch 014 | Train: 0.09400 | Val: 0.05684 | LigMSE: 0.35197
+Epoch 015 | Train: 0.07827 | Val: 0.07854 | LigMSE: 0.33396
+Epoch 016 | Train: 0.07722 | Val: 0.11384 | LigMSE: 0.31980
+Epoch 017 | Train: 0.07516 | Val: 0.08270 | LigMSE: 0.32191
+Epoch 018 | Train: 0.09135 | Val: 0.09900 | LigMSE: 0.31721
+Epoch 019 | Train: 0.08268 | Val: 0.06524 | LigMSE: 0.31325
+Epoch 020 | Train: 0.07096 | Val: 0.07964 | LigMSE: 0.31693
+Epoch 021 | Train: 0.06882 | Val: 0.05108 | LigMSE: 0.33874
+Epoch 022 | Train: 0.06081 | Val: 0.08672 | LigMSE: 0.33342
+Epoch 023 | Train: 0.05801 | Val: 0.04874 | LigMSE: 0.35282
+Epoch 024 | Train: 0.05256 | Val: 0.05331 | LigMSE: 0.34645
+Epoch 025 | Train: 0.04961 | Val: 0.05147 | LigMSE: 0.32174
+Epoch 026 | Train: 0.05344 | Val: 0.04430 | LigMSE: 0.34279
+Epoch 027 | Train: 0.04711 | Val: 0.04833 | LigMSE: 0.33543
+Epoch 028 | Train: 0.05239 | Val: 0.04396 | LigMSE: 0.37977
+Epoch 029 | Train: 0.04565 | Val: 0.04622 | LigMSE: 0.34500
+Epoch 030 | Train: 0.04416 | Val: 0.04644 | LigMSE: 0.35721
+Epoch 031 | Train: 0.04465 | Val: 0.06803 | LigMSE: 0.33476
+Epoch 032 | Train: 0.05194 | Val: 0.10228 | LigMSE: 0.37097
+Epoch 033 | Train: 0.05512 | Val: 0.07339 | LigMSE: 0.34520
+Epoch 034 | Train: 0.05396 | Val: 0.04516 | LigMSE: 0.36265
+Epoch 035 | Train: 0.03719 | Val: 0.05317 | LigMSE: 0.37739
+Epoch 036 | Train: 0.03855 | Val: 0.04294 | LigMSE: 0.37052
+Epoch 037 | Train: 0.03801 | Val: 0.04519 | LigMSE: 0.37280
+Epoch 038 | Train: 0.03751 | Val: 0.05083 | LigMSE: 0.38378
+Epoch 039 | Train: 0.03719 | Val: 0.04797 | LigMSE: 0.38609
+Epoch 040 | Train: 0.03665 | Val: 0.04243 | LigMSE: 0.37706
+Epoch 041 | Train: 0.04041 | Val: 0.05031 | LigMSE: 0.38826
+Epoch 042 | Train: 0.03489 | Val: 0.03994 | LigMSE: 0.36063
+Epoch 043 | Train: 0.03230 | Val: 0.04541 | LigMSE: 0.38478
+Epoch 044 | Train: 0.03486 | Val: 0.04252 | LigMSE: 0.38882
+Epoch 045 | Train: 0.03195 | Val: 0.04144 | LigMSE: 0.37310
+Epoch 046 | Train: 0.03326 | Val: 0.03853 | LigMSE: 0.38312
+Epoch 047 | Train: 0.03077 | Val: 0.04014 | LigMSE: 0.38385
+Epoch 048 | Train: 0.03260 | Val: 0.04061 | LigMSE: 0.36569
+Epoch 049 | Train: 0.03485 | Val: 0.05711 | LigMSE: 0.39022
+Epoch 050 | Train: 0.03712 | Val: 0.03832 | LigMSE: 0.37535
+Epoch 051 | Train: 0.03418 | Val: 0.05168 | LigMSE: 0.38488
+Epoch 052 | Train: 0.03356 | Val: 0.03857 | LigMSE: 0.40031
+Epoch 053 | Train: 0.03276 | Val: 0.03961 | LigMSE: 0.39612
+Epoch 054 | Train: 0.03321 | Val: 0.04439 | LigMSE: 0.38061
+Epoch 055 | Train: 0.03321 | Val: 0.04789 | LigMSE: 0.40230
+Epoch 056 | Train: 0.03294 | Val: 0.04405 | LigMSE: 0.41725
+Epoch 057 | Train: 0.02833 | Val: 0.03770 | LigMSE: 0.40494
+Epoch 058 | Train: 0.02761 | Val: 0.03925 | LigMSE: 0.41433
+Epoch 059 | Train: 0.02849 | Val: 0.03854 | LigMSE: 0.40982
+Epoch 060 | Train: 0.02701 | Val: 0.03834 | LigMSE: 0.41234
+Epoch 061 | Train: 0.02715 | Val: 0.03769 | LigMSE: 0.41301
+Epoch 062 | Train: 0.02583 | Val: 0.03769 | LigMSE: 0.41964
+Epoch 063 | Train: 0.02623 | Val: 0.03736 | LigMSE: 0.40876
+Epoch 064 | Train: 0.02555 | Val: 0.03838 | LigMSE: 0.41287
+Epoch 065 | Train: 0.02529 | Val: 0.03755 | LigMSE: 0.42079
+Epoch 066 | Train: 0.02507 | Val: 0.03770 | LigMSE: 0.42001
+Epoch 067 | Train: 0.02494 | Val: 0.03705 | LigMSE: 0.42701
+Epoch 068 | Train: 0.02484 | Val: 0.03802 | LigMSE: 0.42901
+Epoch 069 | Train: 0.02470 | Val: 0.03694 | LigMSE: 0.42520
+Epoch 070 | Train: 0.02549 | Val: 0.03789 | LigMSE: 0.42798
+Epoch 071 | Train: 0.02505 | Val: 0.03734 | LigMSE: 0.43101
+Epoch 072 | Train: 0.02516 | Val: 0.04117 | LigMSE: 0.44169
+Epoch 073 | Train: 0.02529 | Val: 0.03784 | LigMSE: 0.44046
+Epoch 074 | Train: 0.02442 | Val: 0.03716 | LigMSE: 0.42408
+Epoch 075 | Train: 0.02411 | Val: 0.03665 | LigMSE: 0.43088
+Epoch 076 | Train: 0.02483 | Val: 0.03680 | LigMSE: 0.43595
+Epoch 077 | Train: 0.02394 | Val: 0.04065 | LigMSE: 0.44706
+Epoch 078 | Train: 0.02389 | Val: 0.03839 | LigMSE: 0.44070
+Epoch 079 | Train: 0.02419 | Val: 0.03886 | LigMSE: 0.44551
+Epoch 080 | Train: 0.02338 | Val: 0.03727 | LigMSE: 0.44035
+Epoch 081 | Train: 0.02329 | Val: 0.03701 | LigMSE: 0.44196
+Epoch 082 | Train: 0.02318 | Val: 0.03696 | LigMSE: 0.45235
+Epoch 083 | Train: 0.02275 | Val: 0.03806 | LigMSE: 0.44616
+Epoch 084 | Train: 0.02274 | Val: 0.03713 | LigMSE: 0.44891
+Epoch 085 | Train: 0.02237 | Val: 0.03706 | LigMSE: 0.44750
+Epoch 086 | Train: 0.02238 | Val: 0.03705 | LigMSE: 0.45662
+Epoch 087 | Train: 0.02217 | Val: 0.03684 | LigMSE: 0.45468
+Epoch 088 | Train: 0.02205 | Val: 0.03703 | LigMSE: 0.45915
+Epoch 089 | Train: 0.02191 | Val: 0.03685 | LigMSE: 0.45481
+Epoch 090 | Train: 0.02177 | Val: 0.03692 | LigMSE: 0.45610
+Epoch 091 | Train: 0.02171 | Val: 0.03694 | LigMSE: 0.46264
+Epoch 092 | Train: 0.02169 | Val: 0.03708 | LigMSE: 0.45835
+Epoch 093 | Train: 0.02164 | Val: 0.03708 | LigMSE: 0.46372
+Epoch 094 | Train: 0.02148 | Val: 0.03688 | LigMSE: 0.46307
+Epoch 095 | Train: 0.02142 | Val: 0.03702 | LigMSE: 0.46469
+Epoch 096 | Train: 0.02139 | Val: 0.03690 | LigMSE: 0.46305
+Epoch 097 | Train: 0.02135 | Val: 0.03695 | LigMSE: 0.46105
+Epoch 098 | Train: 0.02132 | Val: 0.03708 | LigMSE: 0.46877
+Epoch 099 | Train: 0.02131 | Val: 0.03697 | LigMSE: 0.46869
+Epoch 100 | Train: 0.02127 | Val: 0.03696 | LigMSE: 0.46821
+wandb: uploading media/images/Validation Visuals_1599_6c86d1b4e0c054a21119.png; uploading media/images/Validation Visuals_1599_043259d91fe327d91f09.png; uploading media/images/Validation Visuals_1599_9868f017bc39b5632b20.png; uploading output.log; uploading wandb-summary.json
+wandb: uploading wandb-summary.json
+wandb: uploading history steps 1599-1599, summary, console lines 103-104
+wandb: 
+wandb: Run history:
+wandb:    avg_grad_norm ▂▂▆▇▇█▇▇▆▆▆█▅▅▅▄▄▃▅▆▆▄▃▂▂▃▃▃▃▃▂▂▃▂▂▁▁▁▁▁
+wandb:  batch_grad_norm ▆▇▃▇▅█▆▆▆▄▆▁▅▃▄▅▅▃▇▆▅▇▆▃▅▃▄▂▃▃▂▂▁▃▁▂▁▁▂▁
+wandb: batch_train_loss █▄▃▄▂▃▂▁▂▂▂▃▂▁▁▂▁▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:            epoch ▁▁▁▂▂▂▂▂▃▃▃▃▄▄▄▄▄▄▄▅▅▅▅▅▆▆▆▆▆▇▇▇▇▇▇█████
+wandb:               lr ██████▄▄▄▃▃▃▃▃▃▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:       train_loss █▅▄▄▃▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:         val_loss ▇██▂▄▂▁▂▁▂▁▁▁▁▁▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:   val_masked_mse █▅█▅▃▂▁▂▁▁▁▂▁▂▁▂▂▃▃▃▃▃▃▃▄▄▄▄▄▄▄▅▄▄▅▅▅▅▅▅
+wandb: 
+wandb: Run summary:
+wandb:    avg_grad_norm 2.10293
+wandb:  batch_grad_norm 0.76992
+wandb: batch_train_loss 0.02113
+wandb:            epoch 100
+wandb:               lr 0.0
+wandb:       train_loss 0.02127
+wandb:         val_loss 0.03696
+wandb:   val_masked_mse 0.46821
+wandb: 
+wandb: 🚀 View run run_20260211_234738 at: https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting/runs/00m49ghb
+wandb: ⭐️ View project at: https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting
+wandb: Synced 5 W&B file(s), 60 media file(s), 0 artifact file(s) and 1 other file(s)
+wandb: Find logs at: ./wandb/run-20260211_234740-00m49ghb/logs
+
+--- Run Complete. Best Loss: 0.03665 ---

@@ -1,0 +1,124 @@
+_wandb:
+    value:
+        cli_version: 0.24.2
+        e:
+            kyg9s6cmxej0c0vqbdqothlpodcsidw4:
+                codePath: src/04_train.py
+                codePathLocal: src/04_train.py
+                cpu_count: 128
+                cpu_count_logical: 256
+                cudaVersion: "13.0"
+                disk:
+                    /:
+                        total: "31317663744"
+                        used: "16990322688"
+                email: nandanhaloi123@gmail.com
+                executable: /home/x_nanha/.conda/envs/CryoLigate/bin/python
+                git:
+                    commit: 2fe3b2d80059451f74c067ef1c2744b38d418c0a
+                    remote: https://github.com/nandanhaloi123/CryoLigate.git
+                gpu: NVIDIA A100-SXM4-80GB
+                gpu_count: 4
+                gpu_nvidia:
+                    - architecture: Ampere
+                      cudaCores: 6912
+                      memoryTotal: "85899345920"
+                      name: NVIDIA A100-SXM4-80GB
+                      uuid: GPU-4a7e87ba-330d-16ae-ba84-3a080785099e
+                    - architecture: Ampere
+                      cudaCores: 6912
+                      memoryTotal: "85899345920"
+                      name: NVIDIA A100-SXM4-80GB
+                      uuid: GPU-8037dd42-f112-cab1-b7ed-e29e26cba8b7
+                    - architecture: Ampere
+                      cudaCores: 6912
+                      memoryTotal: "85899345920"
+                      name: NVIDIA A100-SXM4-80GB
+                      uuid: GPU-cf8dbd04-1e85-8d09-9198-26f3542adb0b
+                    - architecture: Ampere
+                      cudaCores: 6912
+                      memoryTotal: "85899345920"
+                      name: NVIDIA A100-SXM4-80GB
+                      uuid: GPU-4daa0f7a-ce94-81bf-271a-1813d264d561
+                host: node093
+                memory:
+                    total: "2164298833920"
+                os: Linux-4.18.0-553.94.1.el8_10.x86_64-x86_64-with-glibc2.28
+                program: /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/src/04_train.py
+                python: CPython 3.9.23
+                root: /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate
+                slurm:
+                    cluster_name: berzelius
+                    conf: /etc/slurm/slurm.conf
+                    cpus_on_node: "64"
+                    gpus: "4"
+                    gpus_on_node: "4"
+                    gtids: "0"
+                    job_account: berzelius-2025-269
+                    job_cpus_per_node: "64"
+                    job_end_time: "1771195870"
+                    job_gid: "12600"
+                    job_gpus: 0,2,5,6
+                    job_id: "15546291"
+                    job_name: submit_berzelious.sh
+                    job_nodelist: node093
+                    job_num_nodes: "1"
+                    job_partition: berzelius
+                    job_qos: normal
+                    job_start_time: "1770936666"
+                    job_uid: "12600"
+                    job_user: x_nanha
+                    jobid: "15546291"
+                    localid: "0"
+                    mem_per_cpu: "7950"
+                    nnodes: "1"
+                    nodeid: "0"
+                    nodelist: node093
+                    oom_kill_step: "0"
+                    prio_process: "0"
+                    procid: "0"
+                    script_context: prolog_task
+                    submit_dir: /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate
+                    submit_host: berzelius1.nsc.liu.se
+                    task_pid: "3082926"
+                    tasks_per_node: "64"
+                    topology_addr: ibsw[40-41,43-59].ibsw[1-8].node093
+                    topology_addr_pattern: switch.switch.node
+                startedAt: "2026-02-12T22:51:33.809715Z"
+                writerId: kyg9s6cmxej0c0vqbdqothlpodcsidw4
+        m: []
+        python_version: 3.9.23
+        t:
+            "1":
+                - 1
+                - 41
+                - 49
+                - 63
+            "2":
+                - 1
+                - 41
+                - 49
+                - 63
+            "3":
+                - 2
+                - 3
+                - 13
+                - 16
+            "4": 3.9.23
+            "5": 0.24.2
+            "12": 0.24.2
+            "13": linux-x86_64
+batch_size:
+    value: 16
+epochs:
+    value: 100
+ligand_dim:
+    value: 1024
+ligand_weight:
+    value: 500
+lr:
+    value: 0.0002
+ssim_weight:
+    value: 0.2
+voxel_size:
+    value: 0.5
