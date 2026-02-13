@@ -1,0 +1,43 @@
+/home/x_nanha/.conda/envs/CryoLigate/lib/python3.9/site-packages/timm/models/layers/__init__.py:49: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /home/x_nanha/.netrc.
+wandb: Currently logged in as: nandanhaloi123 (nandanhaloi123-kth-royal-institute-of-technology) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run 1y4p0guf
+wandb: Tracking run with wandb version 0.24.2
+wandb: Run data is saved locally in /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/wandb/run-20260213_160135-1y4p0guf
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run run_20260213_160133_ROI_FUNDAMENTAL_no_aug
+wandb: ⭐️ View project at https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting
+wandb: 🚀 View run at https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting/runs/1y4p0guf
+--- Training run_20260213_160133_ROI_FUNDAMENTAL_no_aug on cuda ---
+--- Loss Config: Dice=0.5, ROI_MSE=10.0, Global=0.1 ---
+Loading dataset...
+Initializing SCUNet...
+wandb: WARNING Saving files without folders. If you want to preserve subdirectories pass base_path to wandb.save, i.e. wandb.save("/mnt/folder/file.h5", base_path="/mnt")
+wandb: WARNING Symlinked 1 file into the W&B run directory; call wandb.save again to sync new files.
+Epoch 001 | Val Loss: 4.03918 | Ligand MSE: 0.37360 | Dice: 0.538
+   >>> New Best Ligand MSE! (0.37360) Saving weights...
+Epoch 002 | Val Loss: 3.70142 | Ligand MSE: 0.34498 | Dice: 0.620
+   >>> New Best Ligand MSE! (0.34498) Saving weights...
+Epoch 003 | Val Loss: 3.55640 | Ligand MSE: 0.33257 | Dice: 0.649
+   >>> New Best Ligand MSE! (0.33257) Saving weights...
+Epoch 004 | Val Loss: 3.55011 | Ligand MSE: 0.33432 | Dice: 0.690
+Epoch 005 | Val Loss: 3.54447 | Ligand MSE: 0.33452 | Dice: 0.703
+Epoch 006 | Val Loss: 3.71465 | Ligand MSE: 0.35377 | Dice: 0.739
+Epoch 007 | Val Loss: 3.84899 | Ligand MSE: 0.36818 | Dice: 0.757
+Epoch 008 | Val Loss: 3.78925 | Ligand MSE: 0.36243 | Dice: 0.758
+Epoch 009 | Val Loss: 3.75851 | Ligand MSE: 0.35971 | Dice: 0.765
+Epoch 010 | Val Loss: 3.81297 | Ligand MSE: 0.36642 | Dice: 0.785
+Epoch 011 | Val Loss: 3.63078 | Ligand MSE: 0.34808 | Dice: 0.781
+Epoch 012 | Val Loss: 3.62164 | Ligand MSE: 0.34814 | Dice: 0.796
+Epoch 013 | Val Loss: 3.64626 | Ligand MSE: 0.35137 | Dice: 0.807
+Epoch 014 | Val Loss: 3.58219 | Ligand MSE: 0.34544 | Dice: 0.815
+Epoch 015 | Val Loss: 3.56751 | Ligand MSE: 0.34458 | Dice: 0.824
+Epoch 016 | Val Loss: 3.63384 | Ligand MSE: 0.35196 | Dice: 0.835
+Epoch 017 | Val Loss: 3.60516 | Ligand MSE: 0.34969 | Dice: 0.844
+Epoch 018 | Val Loss: 3.58223 | Ligand MSE: 0.34768 | Dice: 0.848
+Epoch 019 | Val Loss: 3.55043 | Ligand MSE: 0.34499 | Dice: 0.856
+Epoch 020 | Val Loss: 3.60926 | Ligand MSE: 0.35152 | Dice: 0.865
+Epoch 021 | Val Loss: 3.56931 | Ligand MSE: 0.34786 | Dice: 0.870
+Epoch 022 | Val Loss: 3.65564 | Ligand MSE: 0.35711 | Dice: 0.879
+Epoch 023 | Val Loss: 3.55963 | Ligand MSE: 0.34765 | Dice: 0.881

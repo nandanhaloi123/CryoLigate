@@ -16,3 +16,4 @@ scipy
 matplotlib
 seaborn
 wandb
+transformers
