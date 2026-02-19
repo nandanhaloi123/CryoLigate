@@ -141,3 +141,36 @@ class EMReadyLikeLoss(nn.Module):
             term2_loss = self.ssim_component(pred, target)
             
         return term1_loss + (self.ssim_weight * term2_loss)
+    
+
+class HybridDiceLoss(nn.Module):
+    def __init__(self, dice_weight=0.7, mse_weight=0.3):
+        super().__init__()
+        self.dice_weight = dice_weight
+        self.mse_weight = mse_weight
+
+    def forward(self, pred, target, mask=None):
+        # 1. MSE Component (Pixel-wise accuracy)
+        # We strictly apply the mask so the background error is ignored.
+        if mask is not None and mask.sum() > 0:
+            # Extract only the voxels where the ligand mask is present
+            pred_ligand = pred[mask > 0.5]
+            target_ligand = target[mask > 0.5]
+            mse_loss = F.mse_loss(pred_ligand, target_ligand)
+        else:
+            # Fallback just in case a completely blank mask passes through
+            mse_loss = F.mse_loss(pred, target)
+
+        # 2. Dice Component (Shape overlap)
+        # Flatten tensors for Dice
+        pred_flat = pred.view(-1)
+        target_flat = target.view(-1)
+        
+        smooth = 1e-5
+        intersection = (pred_flat * target_flat).sum()
+        
+        dice_score = (2. * intersection + smooth) / (pred_flat.pow(2).sum() + target_flat.pow(2).sum() + smooth)
+        dice_loss = 1 - dice_score
+
+        # Combine
+        return (self.dice_weight * dice_loss) + (self.mse_weight * mse_loss)
