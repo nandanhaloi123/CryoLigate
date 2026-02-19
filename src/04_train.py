@@ -261,7 +261,7 @@ def main():
                 preds = model(inputs, lig_emb)
                 
                 # New Loss
-                loss = criterion(preds, targets) 
+                loss = criterion(preds, targets, mask=lig_masks) 
                 loss.backward()
                 
                 total_norm = 0
