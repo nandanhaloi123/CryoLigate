@@ -41,3 +41,66 @@ Epoch 020 | Val Loss: 3.60926 | Ligand MSE: 0.35152 | Dice: 0.865
 Epoch 021 | Val Loss: 3.56931 | Ligand MSE: 0.34786 | Dice: 0.870
 Epoch 022 | Val Loss: 3.65564 | Ligand MSE: 0.35711 | Dice: 0.879
 Epoch 023 | Val Loss: 3.55963 | Ligand MSE: 0.34765 | Dice: 0.881
+Epoch 024 | Val Loss: 3.61833 | Ligand MSE: 0.35392 | Dice: 0.887
+Epoch 025 | Val Loss: 3.58027 | Ligand MSE: 0.35030 | Dice: 0.890
+Epoch 026 | Val Loss: 3.61301 | Ligand MSE: 0.35384 | Dice: 0.894
+Epoch 027 | Val Loss: 3.65298 | Ligand MSE: 0.35812 | Dice: 0.898
+Epoch 028 | Val Loss: 3.62666 | Ligand MSE: 0.35565 | Dice: 0.900
+Epoch 029 | Val Loss: 3.65774 | Ligand MSE: 0.35893 | Dice: 0.903
+Epoch 030 | Val Loss: 3.63164 | Ligand MSE: 0.35644 | Dice: 0.904
+Epoch 031 | Val Loss: 3.65497 | Ligand MSE: 0.35892 | Dice: 0.906
+Epoch 032 | Val Loss: 3.63285 | Ligand MSE: 0.35678 | Dice: 0.907
+Epoch 033 | Val Loss: 3.66486 | Ligand MSE: 0.36013 | Dice: 0.910
+Epoch 034 | Val Loss: 3.68374 | Ligand MSE: 0.36213 | Dice: 0.911
+Epoch 035 | Val Loss: 3.64912 | Ligand MSE: 0.35869 | Dice: 0.912
+Epoch 036 | Val Loss: 3.69602 | Ligand MSE: 0.36351 | Dice: 0.913
+Epoch 037 | Val Loss: 3.72412 | Ligand MSE: 0.36638 | Dice: 0.914
+Epoch 038 | Val Loss: 3.69989 | Ligand MSE: 0.36399 | Dice: 0.915
+Epoch 039 | Val Loss: 3.73289 | Ligand MSE: 0.36737 | Dice: 0.916
+Epoch 040 | Val Loss: 3.71523 | Ligand MSE: 0.36562 | Dice: 0.916
+Epoch 041 | Val Loss: 3.72065 | Ligand MSE: 0.36622 | Dice: 0.917
+Epoch 042 | Val Loss: 3.72662 | Ligand MSE: 0.36685 | Dice: 0.917
+Epoch 043 | Val Loss: 3.73770 | Ligand MSE: 0.36800 | Dice: 0.918
+Epoch 044 | Val Loss: 3.74016 | Ligand MSE: 0.36826 | Dice: 0.918
+Epoch 045 | Val Loss: 3.73350 | Ligand MSE: 0.36761 | Dice: 0.918
+Epoch 046 | Val Loss: 3.74340 | Ligand MSE: 0.36864 | Dice: 0.919
+Epoch 047 | Val Loss: 3.75099 | Ligand MSE: 0.36942 | Dice: 0.919
+Epoch 048 | Val Loss: 3.75963 | Ligand MSE: 0.37030 | Dice: 0.919
+Epoch 049 | Val Loss: 3.76243 | Ligand MSE: 0.37060 | Dice: 0.920
+Epoch 050 | Val Loss: 3.76235 | Ligand MSE: 0.37060 | Dice: 0.920
+Epoch 051 | Val Loss: 3.76492 | Ligand MSE: 0.37087 | Dice: 0.920
+Epoch 052 | Val Loss: 3.76064 | Ligand MSE: 0.37045 | Dice: 0.920
+Epoch 053 | Val Loss: 3.76116 | Ligand MSE: 0.37052 | Dice: 0.920
+Epoch 054 | Val Loss: 3.76901 | Ligand MSE: 0.37131 | Dice: 0.920
+Epoch 055 | Val Loss: 3.76932 | Ligand MSE: 0.37135 | Dice: 0.921
+Epoch 056 | Val Loss: 3.76572 | Ligand MSE: 0.37099 | Dice: 0.921
+Epoch 057 | Val Loss: 3.76718 | Ligand MSE: 0.37114 | Dice: 0.921
+Epoch 058 | Val Loss: 3.76664 | Ligand MSE: 0.37109 | Dice: 0.921
+Epoch 059 | Val Loss: 3.76650 | Ligand MSE: 0.37108 | Dice: 0.921
+wandb: updating run metadata
+wandb: uploading history steps 59-59, summary, console lines 68-72
+wandb: 
+wandb: Run history:
+wandb:       dice ▁▂▄▄▅▅▆▅▆▆▆▆▇▇▇▇▇▇██████████████████████
+wandb:      epoch ▁▁▁▁▂▂▂▂▂▂▃▃▃▃▃▃▄▄▄▄▅▅▅▅▅▆▆▆▆▆▆▇▇▇▇▇████
+wandb: masked_mse █▃▁▁▅▆▆▇▄▄▃▄▄▃▄▅▅▅▅▅▅▆▅▆▇▇▇▇▇▇▇▇▇▇█▇████
+wandb: train_loss █▅▄▃▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:   val_loss █▁▁▃▅▄▅▂▂▂▁▂▂▁▂▁▂▂▃▂▂▂▃▃▄▄▃▄▄▄▄▄▄▄▄▄▄▄▄▄
+wandb: 
+wandb: Run summary:
+wandb:       dice 0.92088
+wandb:      epoch 59
+wandb: masked_mse 0.3714
+wandb: train_loss 0.05837
+wandb:   val_loss 3.76963
+wandb: 
+wandb: 🚀 View run run_20260213_160133_ROI_FUNDAMENTAL_no_aug at: https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting/runs/1y4p0guf
+wandb: ⭐️ View project at: https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting
+wandb: Synced 8 W&B file(s), 0 media file(s), 0 artifact file(s) and 1 other file(s)
+wandb: Find logs at: ./wandb/run-20260213_160135-1y4p0guf/logs
+Epoch 060 | Val Loss: 3.76963 | Ligand MSE: 0.37140 | Dice: 0.921
+
+--- Training Ended. Finalizing... ---
+--- Loading Best Model Weights from /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/results/run_20260213_160133_ROI_FUNDAMENTAL_no_aug/best_model.pth ---
+   >>> Generating 5 MRC samples for inspection...
+--- Done. Check results in /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/results/run_20260213_160133_ROI_FUNDAMENTAL_no_aug ---
