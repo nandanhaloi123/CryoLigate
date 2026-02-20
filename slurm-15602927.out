@@ -1,0 +1,111 @@
+/home/x_nanha/.conda/envs/CryoLigate/lib/python3.9/site-packages/timm/models/layers/__init__.py:49: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /home/x_nanha/.netrc.
+wandb: Currently logged in as: nandanhaloi123 (nandanhaloi123-kth-royal-institute-of-technology) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run 3672eo7v
+wandb: Tracking run with wandb version 0.24.2
+wandb: Run data is saved locally in /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/wandb/run-20260219_220633-3672eo7v
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run run_20260219_220629_DICE_LOSS_no_aug
+wandb: ⭐️ View project at https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting
+wandb: 🚀 View run at https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting/runs/3672eo7v
+--- Training run_20260219_220629_DICE_LOSS_no_aug on cuda ---
+--- FUNDAMENTAL CHANGE: Using Hybrid Dice (0.7) + MSE (0.3) Loss ---
+wandb: WARNING Saving files without folders. If you want to preserve subdirectories pass base_path to wandb.save, i.e. wandb.save("/mnt/folder/file.h5", base_path="/mnt")
+wandb: WARNING Symlinked 1 file into the W&B run directory; call wandb.save again to sync new files.
+Epoch 001 | Val Loss (Dice+MSE): 0.24623 | Raw Ligand MSE: 0.35272
+   >>> New Best Val Loss! (0.24623) Saving weights...
+Epoch 002 | Val Loss (Dice+MSE): 0.16668 | Raw Ligand MSE: 0.34071
+   >>> New Best Val Loss! (0.16668) Saving weights...
+Epoch 003 | Val Loss (Dice+MSE): 0.14119 | Raw Ligand MSE: 0.30373
+   >>> New Best Val Loss! (0.14119) Saving weights...
+Epoch 004 | Val Loss (Dice+MSE): 0.13833 | Raw Ligand MSE: 0.32373
+   >>> New Best Val Loss! (0.13833) Saving weights...
+Epoch 005 | Val Loss (Dice+MSE): 0.14121 | Raw Ligand MSE: 0.34218
+Epoch 006 | Val Loss (Dice+MSE): 0.12898 | Raw Ligand MSE: 0.30420
+   >>> New Best Val Loss! (0.12898) Saving weights...
+Epoch 007 | Val Loss (Dice+MSE): 0.13842 | Raw Ligand MSE: 0.35526
+Epoch 008 | Val Loss (Dice+MSE): 0.12703 | Raw Ligand MSE: 0.31732
+   >>> New Best Val Loss! (0.12703) Saving weights...
+Epoch 009 | Val Loss (Dice+MSE): 0.13135 | Raw Ligand MSE: 0.33341
+Epoch 010 | Val Loss (Dice+MSE): 0.14060 | Raw Ligand MSE: 0.37468
+Epoch 011 | Val Loss (Dice+MSE): 0.12833 | Raw Ligand MSE: 0.33817
+Epoch 012 | Val Loss (Dice+MSE): 0.12939 | Raw Ligand MSE: 0.34373
+Epoch 013 | Val Loss (Dice+MSE): 0.14051 | Raw Ligand MSE: 0.38468
+Epoch 014 | Val Loss (Dice+MSE): 0.13404 | Raw Ligand MSE: 0.36612
+Epoch 015 | Val Loss (Dice+MSE): 0.14250 | Raw Ligand MSE: 0.39750
+Epoch 016 | Val Loss (Dice+MSE): 0.14017 | Raw Ligand MSE: 0.39092
+Epoch 017 | Val Loss (Dice+MSE): 0.13890 | Raw Ligand MSE: 0.38775
+Epoch 018 | Val Loss (Dice+MSE): 0.14072 | Raw Ligand MSE: 0.39447
+Epoch 019 | Val Loss (Dice+MSE): 0.14729 | Raw Ligand MSE: 0.41769
+Epoch 020 | Val Loss (Dice+MSE): 0.14101 | Raw Ligand MSE: 0.39807
+Epoch 021 | Val Loss (Dice+MSE): 0.14728 | Raw Ligand MSE: 0.42015
+Epoch 022 | Val Loss (Dice+MSE): 0.14558 | Raw Ligand MSE: 0.41529
+Epoch 023 | Val Loss (Dice+MSE): 0.14837 | Raw Ligand MSE: 0.42471
+Epoch 024 | Val Loss (Dice+MSE): 0.14535 | Raw Ligand MSE: 0.41545
+Epoch 025 | Val Loss (Dice+MSE): 0.15006 | Raw Ligand MSE: 0.43187
+Epoch 026 | Val Loss (Dice+MSE): 0.14833 | Raw Ligand MSE: 0.42645
+Epoch 027 | Val Loss (Dice+MSE): 0.15263 | Raw Ligand MSE: 0.44128
+Epoch 028 | Val Loss (Dice+MSE): 0.15328 | Raw Ligand MSE: 0.44373
+Epoch 029 | Val Loss (Dice+MSE): 0.15301 | Raw Ligand MSE: 0.44309
+Epoch 030 | Val Loss (Dice+MSE): 0.15417 | Raw Ligand MSE: 0.44720
+Epoch 031 | Val Loss (Dice+MSE): 0.15257 | Raw Ligand MSE: 0.44213
+Epoch 032 | Val Loss (Dice+MSE): 0.15831 | Raw Ligand MSE: 0.46156
+Epoch 033 | Val Loss (Dice+MSE): 0.15465 | Raw Ligand MSE: 0.44963
+Epoch 034 | Val Loss (Dice+MSE): 0.15762 | Raw Ligand MSE: 0.45972
+Epoch 035 | Val Loss (Dice+MSE): 0.15544 | Raw Ligand MSE: 0.45251
+Epoch 036 | Val Loss (Dice+MSE): 0.15931 | Raw Ligand MSE: 0.46554
+Epoch 037 | Val Loss (Dice+MSE): 0.15737 | Raw Ligand MSE: 0.45915
+Epoch 038 | Val Loss (Dice+MSE): 0.15955 | Raw Ligand MSE: 0.46657
+Epoch 039 | Val Loss (Dice+MSE): 0.15848 | Raw Ligand MSE: 0.46324
+Epoch 040 | Val Loss (Dice+MSE): 0.15878 | Raw Ligand MSE: 0.46433
+Epoch 041 | Val Loss (Dice+MSE): 0.15976 | Raw Ligand MSE: 0.46755
+Epoch 042 | Val Loss (Dice+MSE): 0.15967 | Raw Ligand MSE: 0.46736
+Epoch 043 | Val Loss (Dice+MSE): 0.16021 | Raw Ligand MSE: 0.46934
+Epoch 044 | Val Loss (Dice+MSE): 0.16024 | Raw Ligand MSE: 0.46945
+Epoch 045 | Val Loss (Dice+MSE): 0.16069 | Raw Ligand MSE: 0.47101
+Epoch 046 | Val Loss (Dice+MSE): 0.16000 | Raw Ligand MSE: 0.46877
+Epoch 047 | Val Loss (Dice+MSE): 0.15978 | Raw Ligand MSE: 0.46807
+Epoch 048 | Val Loss (Dice+MSE): 0.15963 | Raw Ligand MSE: 0.46765
+Epoch 049 | Val Loss (Dice+MSE): 0.15993 | Raw Ligand MSE: 0.46865
+Epoch 050 | Val Loss (Dice+MSE): 0.16132 | Raw Ligand MSE: 0.47333
+Epoch 051 | Val Loss (Dice+MSE): 0.16078 | Raw Ligand MSE: 0.47158
+Epoch 052 | Val Loss (Dice+MSE): 0.16033 | Raw Ligand MSE: 0.47008
+Epoch 053 | Val Loss (Dice+MSE): 0.16193 | Raw Ligand MSE: 0.47540
+Epoch 054 | Val Loss (Dice+MSE): 0.16091 | Raw Ligand MSE: 0.47209
+Epoch 055 | Val Loss (Dice+MSE): 0.16076 | Raw Ligand MSE: 0.47159
+Epoch 056 | Val Loss (Dice+MSE): 0.16111 | Raw Ligand MSE: 0.47279
+Epoch 057 | Val Loss (Dice+MSE): 0.16175 | Raw Ligand MSE: 0.47493
+Epoch 058 | Val Loss (Dice+MSE): 0.16118 | Raw Ligand MSE: 0.47305
+Epoch 059 | Val Loss (Dice+MSE): 0.16177 | Raw Ligand MSE: 0.47506
+wandb: updating run metadata
+wandb: uploading output.log; uploading wandb-summary.json
+wandb: uploading summary, console lines 73-78
+wandb: 
+wandb: Run history:
+wandb:      epoch ▁▁▁▁▁▂▂▂▂▂▃▃▃▃▃▃▃▄▄▄▄▄▄▅▅▅▅▅▆▆▆▆▇▇▇▇▇▇██
+wandb: masked_mse ▃▂▃▁▃▂▄▂▃▄▅▅▄▅▅▆▆▆▆▆▇▇▇▇████████████████
+wandb: train_loss █▅▄▃▃▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:   val_loss █▃▃▁▃▂▁▁▃▄▃▃▄▃▄▅▅▆▆▆▆▆▆▆▆▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇
+wandb: 
+wandb: Run summary:
+wandb:      epoch 59
+wandb: masked_mse 0.47377
+wandb: train_loss 0.01456
+wandb:   val_loss 0.16138
+wandb: 
+wandb: 🚀 View run run_20260219_220629_DICE_LOSS_no_aug at: https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting/runs/3672eo7v
+wandb: ⭐️ View project at: https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting
+wandb: Synced 8 W&B file(s), 0 media file(s), 0 artifact file(s) and 1 other file(s)
+wandb: Find logs at: ./wandb/run-20260219_220633-3672eo7v/logs
+Epoch 060 | Val Loss (Dice+MSE): 0.16138 | Raw Ligand MSE: 0.47377
+
+--- Training Ended. Finalizing... ---
+--- Loading Best Model Weights from /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/results/run_20260219_220629_DICE_LOSS_no_aug/best_model.pth ---
+   >>> Generating 5 MRC samples for inspection...
+      Saving: 8wny_DSN_1_pred.mrc
+      Saving: 8xv5_PXM_1_pred.mrc
+      Saving: 8tkd_I3P_3_pred.mrc
+      Saving: 8tzd_XMO_3_pred.mrc
+      Saving: 8xjo_PUC_1_pred.mrc
+--- Done. Check results in /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/results/run_20260219_220629_DICE_LOSS_no_aug ---

@@ -5,8 +5,6 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset, Subset
 import h5py
 import numpy as np
-import rdkit.Chem as Chem
-import rdkit.Chem.AllChem as AllChem
 from pathlib import Path
 import matplotlib.pyplot as plt
 import os
@@ -16,11 +14,10 @@ from datetime import datetime
 import wandb
 import mrcfile
 import argparse
-from loss import HybridDiceLoss
 
 # --- IMPORT CUSTOM MODULES ---
 sys.path.append(str(Path(__file__).resolve().parent))
-from architecture import SCUNet               
+from architecture import SCUNet                
 from utils_common import save_mrc_with_origin
 
 # --- CONFIGURATION DEFAULTS ---
@@ -31,17 +28,18 @@ DATA_DIR = PROJECT_ROOT / "data" / "processed"
 # 1. SETUP DIRS
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 HDF5_FILE = DATA_DIR / "ml_dataset_FINAL.h5"
+EMBEDDINGS_FILE = DATA_DIR / "molformer_embeddings.pt" # <--- NEW PATH FOR MOLFORMER
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 CONFIG = {
     "batch_size": 16,
-    "epochs": 60,          # Reduced from 100 (Model learns fast)
+    "epochs": 60,
     "lr": 1e-4,
-    "ligand_dim": 1024,
+    "ligand_dim": 768,       # <--- CHANGED FROM 1024 TO 768
     "voxel_size": 0.5,
-    "dice_weight": 0.7,    # High priority on shape
-    "mse_weight": 0.3,     # Lower priority on exact intensity
-    "augmentation": False  # Keep False for now as discussed
+    "dice_weight": 0.7,
+    "mse_weight": 0.3,
+    "augmentation": False 
 }
 
 # --- HELPER CLASS FOR MRC SAVING ---
@@ -51,28 +49,47 @@ class SimpleCell:
         self.b = b
         self.c = c
 
+# --- CORRECTED LOSS FUNCTION: MASKED MSE + DICE (TRUE BASELINE) ---
+class HybridDiceLoss(nn.Module):
+    def __init__(self, dice_weight=0.7, mse_weight=0.3):
+        super().__init__()
+        self.dice_weight = dice_weight
+        self.mse_weight = mse_weight
 
-# --- DATASET CLASS ---
+    def forward(self, pred, target, mask=None):
+        # 1. MSE Component (Pixel-wise accuracy masked to ligand pocket)
+        if mask is not None and mask.sum() > 0:
+            pred_ligand = pred[mask > 0.5]
+            target_ligand = target[mask > 0.5]
+            mse_loss = F.mse_loss(pred_ligand, target_ligand)
+        else:
+            mse_loss = F.mse_loss(pred, target)
+
+        # 2. Dice Component (Shape overlap)
+        pred_flat = pred.view(-1)
+        target_flat = target.view(-1)
+        
+        smooth = 1e-5
+        intersection = (pred_flat * target_flat).sum()
+        dice_score = (2. * intersection + smooth) / (pred_flat.pow(2).sum() + target_flat.pow(2).sum() + smooth)
+        dice_loss = 1 - dice_score
+
+        return (self.dice_weight * dice_loss) + (self.mse_weight * mse_loss)
+
+# --- NEW DATASET CLASS FOR MOLFORMER ---
 class CryoEMDataset(Dataset):
-    def __init__(self, h5_path, ligand_dim=1024, augment=False):
+    def __init__(self, h5_path, embeddings_path, augment=False):
         self.h5_path = h5_path
-        self.ligand_dim = ligand_dim
         self.augment = augment 
         self.h5_file = None
+        
+        # Load the pre-computed MolFormer embeddings
+        print(f"Loading embeddings from {embeddings_path}...")
+        self.ligand_embeddings = torch.load(embeddings_path)
         
         with h5py.File(h5_path, 'r') as f:
             self.length = len(f['pdb_ids'])
 
-    def _get_fingerprint(self, smiles_bytes):
-        try:
-            smiles = smiles_bytes.decode('utf-8')
-            mol = Chem.MolFromSmiles(smiles)
-            if mol is None: return torch.zeros(self.ligand_dim, dtype=torch.float32)
-            fp = AllChem.GetMorganFingerprintAsBitVect(mol, 2, nBits=self.ligand_dim)
-            return torch.from_numpy(np.array(fp, dtype=np.float32))
-        except:
-            return torch.zeros(self.ligand_dim, dtype=torch.float32)
-    
     def __len__(self):
         return self.length
 
@@ -87,12 +104,11 @@ class CryoEMDataset(Dataset):
         target = self.h5_file['ground_truth_maps'][idx]
         target = np.expand_dims(target, axis=0)
         
-        # We don't strictly need the mask for Dice, but we pass it for consistency
         lig_mask = self.h5_file['masks'][idx]
         lig_mask = np.expand_dims(lig_mask, axis=0)
 
-        smiles = self.h5_file['ligand_smiles'][idx]
-        ligand_emb = self._get_fingerprint(smiles)
+        # Grab the exact MolFormer embedding for this sample
+        ligand_emb = self.ligand_embeddings[idx]
 
         return (
             torch.from_numpy(input_tensor).float(), 
@@ -113,7 +129,7 @@ def plot_metrics_local(history, save_path):
     axs[0, 0].legend()
     
     axs[0, 1].plot(epochs, history['masked_mse'], 'r')
-    axs[0, 1].set_title('Raw MSE (Monitoring Only)')
+    axs[0, 1].set_title('Raw Val MSE (Masked to Ligand)')
     axs[0, 1].set_yscale('log')
     
     axs[1, 0].plot(epochs, history['grad_norm'], 'g')
@@ -128,11 +144,10 @@ def plot_metrics_local(history, save_path):
     except: pass
     plt.close()
 
-# --- HELPER: SAVE MRC PREDICTIONS (EXACT NAMING) ---
+# --- HELPER: SAVE MRC PREDICTIONS ---
 def save_mrc_samples(model, subset, folder_name, device, num_samples=5):
     """
-    Saves predictions using the EXACT conventions from the generation script.
-    Filename format: pdbid_ligandname_type.mrc
+    Saves predictions safely using the pre-loaded subset tensors.
     """
     print(f"   >>> Generating {num_samples} MRC samples for inspection...")
     model.eval()
@@ -142,35 +157,29 @@ def save_mrc_samples(model, subset, folder_name, device, num_samples=5):
     n_samples = min(num_samples, len(subset))
     if n_samples == 0: return
     
-    # Randomly select indices from the validation subset
-    indices = random.sample(subset.indices, n_samples)
+    # Randomly select local indices from the subset
+    local_indices = random.sample(range(len(subset)), n_samples)
     
     with h5py.File(HDF5_FILE, 'r') as f:
-        for idx in indices:
-            # 1. READ METADATA EXACTLY AS GENERATED
-            pdb_id = f['pdb_ids'][idx].decode('utf-8')
-            lig_name = f['ligand_names'][idx].decode('utf-8') # e.g. "ATP_1"
+        for local_idx in local_indices:
+            global_idx = subset.indices[local_idx] # Map back to HDF5 index
             
-            exp_density = f['exp_density'][idx]
-            protein_mask = f['maps'][idx][0]
-            ground_truth = f['ground_truth_maps'][idx]
-            phys_origin = f['physical_origin'][idx] # The exact origin saved during generation
-            smiles = f['ligand_smiles'][idx].decode('utf-8')
-            
-            # 2. CONSTRUCT BASE NAME
-            # This ensures we know exactly which PDB and which Ligand instance this is
+            # Read Metadata
+            pdb_id = f['pdb_ids'][global_idx].decode('utf-8')
+            lig_name = f['ligand_names'][global_idx].decode('utf-8')
+            phys_origin = f['physical_origin'][global_idx]
             base_name = f"{pdb_id}_{lig_name}" 
             
-            # Prepare Input
-            input_np = np.stack([exp_density, protein_mask], axis=0)
-            input_tensor = torch.from_numpy(input_np).unsqueeze(0).float().to(device)
+            # Read Tensors straight from the subset (which guarantees the correct MolFormer embedding)
+            input_tensor, lig_emb, ground_truth, _ = subset[local_idx]
             
-            try:
-                mol = Chem.MolFromSmiles(smiles)
-                fp = AllChem.GetMorganFingerprintAsBitVect(mol, 2, nBits=CONFIG['ligand_dim'])
-                lig_emb = torch.from_numpy(np.array(fp, dtype=np.float32)).unsqueeze(0).float().to(device)
-            except:
-                lig_emb = torch.zeros(1, CONFIG['ligand_dim']).float().to(device)
+            # Add batch dims and send to device
+            input_tensor = input_tensor.unsqueeze(0).to(device)
+            lig_emb = lig_emb.unsqueeze(0).to(device)
+            
+            # Extract numpy arrays for saving
+            ground_truth_np = ground_truth.squeeze(0).numpy()
+            exp_density_np = input_tensor.squeeze(0)[0].cpu().numpy()
 
             # Predict
             with torch.no_grad():
@@ -178,58 +187,51 @@ def save_mrc_samples(model, subset, folder_name, device, num_samples=5):
             
             pred_np = pred_tensor.cpu().numpy().squeeze()
             
-            # 3. CALCULATE CELL DIMENSIONS (EXACTLY AS IN GENERATION)
-            # Generation used: GRID_SIZE * TARGET_VOXEL_SIZE
             data_to_save = pred_np.T
             nx, ny, nz = data_to_save.shape
-            
-            # We use the config voxel size which matches generation (0.5)
             total_a = nx * CONFIG['voxel_size']
             total_b = ny * CONFIG['voxel_size']
             total_c = nz * CONFIG['voxel_size']
             mock_cell = SimpleCell(total_a, total_b, total_c)
             
-            # 4. SAVE (Prediction, Ground Truth, Input)
             print(f"      Saving: {base_name}_pred.mrc")
             save_mrc_with_origin(data_to_save, output_dir / f"{base_name}_pred.mrc", mock_cell, phys_origin)
-            save_mrc_with_origin(ground_truth.T, output_dir / f"{base_name}_gt.mrc", mock_cell, phys_origin)
-            save_mrc_with_origin(exp_density.T, output_dir / f"{base_name}_input.mrc", mock_cell, phys_origin)
+            save_mrc_with_origin(ground_truth_np.T, output_dir / f"{base_name}_gt.mrc", mock_cell, phys_origin)
+            save_mrc_with_origin(exp_density_np.T, output_dir / f"{base_name}_input.mrc", mock_cell, phys_origin)
 
 # --- MAIN LOOP ---
 def main():
     global RUN_NAME, RESULTS_DIR
     
-    # --- PARSE ARGS ---
     parser = argparse.ArgumentParser()
     parser.add_argument("--augment", action="store_true", help="Enable random rotation")
     parser.add_argument("--no-augment", action="store_false", dest="augment")
-    parser.set_defaults(augment=False) # Default to False based on analysis
+    parser.set_defaults(augment=False) 
     args = parser.parse_args()
     
     CONFIG["augmentation"] = args.augment
 
-    # --- SETUP PATHS ---
     aug_tag = "aug" if CONFIG["augmentation"] else "no_aug"
-    RUN_NAME = f"run_{TIMESTAMP}_DICE_LOSS_{aug_tag}" # Tagged with DICE
+    RUN_NAME = f"run_{TIMESTAMP}_MOLFORMER_{aug_tag}"
     RESULTS_DIR = PROJECT_ROOT / "results" / RUN_NAME
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     
     wandb.init(project="cryoem-ligand-fitting", name=RUN_NAME, config=CONFIG, save_code=True)
     print(f"--- Training {RUN_NAME} on {DEVICE} ---")
-    print(f"--- FUNDAMENTAL CHANGE: Using Hybrid Dice ({CONFIG['dice_weight']}) + MSE ({CONFIG['mse_weight']}) Loss ---")
+    print(f"--- USING MOLFORMER (768) + MASKED LOSS ---")
 
     # --- DATASET ---
-    temp_ds = CryoEMDataset(HDF5_FILE)
+    temp_ds = CryoEMDataset(HDF5_FILE, embeddings_path=EMBEDDINGS_FILE)
     total_len = len(temp_ds)
     del temp_ds
     
     indices = list(range(total_len))
     split_point = int(0.9 * total_len)
     
-    train_ds_full = CryoEMDataset(HDF5_FILE, ligand_dim=CONFIG["ligand_dim"], augment=CONFIG["augmentation"])
+    train_ds_full = CryoEMDataset(HDF5_FILE, embeddings_path=EMBEDDINGS_FILE, augment=CONFIG["augmentation"])
     train_data = Subset(train_ds_full, indices[:split_point])
     
-    val_ds_full = CryoEMDataset(HDF5_FILE, ligand_dim=CONFIG["ligand_dim"], augment=False)
+    val_ds_full = CryoEMDataset(HDF5_FILE, embeddings_path=EMBEDDINGS_FILE, augment=False)
     val_data = Subset(val_ds_full, indices[split_point:])
     
     train_loader = DataLoader(train_data, batch_size=CONFIG["batch_size"], shuffle=True, num_workers=8)
@@ -242,7 +244,6 @@ def main():
     optimizer = optim.AdamW(model.parameters(), lr=CONFIG["lr"])
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
     
-    # *** CHANGE 1: NEW LOSS ***
     criterion = HybridDiceLoss(dice_weight=CONFIG['dice_weight'], mse_weight=CONFIG['mse_weight']).to(DEVICE)
     
     history = {'train_loss': [], 'val_loss': [], 'lr': [], 'grad_norm': [], 'masked_mse': []}
@@ -260,7 +261,6 @@ def main():
                 optimizer.zero_grad()
                 preds = model(inputs, lig_emb)
                 
-                # New Loss
                 loss = criterion(preds, targets, mask=lig_masks) 
                 loss.backward()
                 
@@ -282,10 +282,8 @@ def main():
                     inputs, lig_emb, targets, lig_masks = inputs.to(DEVICE), lig_emb.to(DEVICE), targets.to(DEVICE), lig_masks.to(DEVICE)
                     preds = model(inputs, lig_emb)
                     
-                    # Val Loss (Dice+MSE)
                     val_loss_accum += criterion(preds, targets, mask=lig_masks).item()
                     
-                    # Monitor Raw MSE specifically on the ligand (for legacy comparison)
                     roi_mask = (lig_masks > 0.5)
                     if roi_mask.sum() > 0:
                         masked_mse_accum += ((preds - targets)**2)[roi_mask].mean().item()
@@ -305,11 +303,10 @@ def main():
             scheduler.step(avg_val_loss)
             wandb.log({"train_loss": avg_train_loss, "val_loss": avg_val_loss, "masked_mse": avg_masked_mse, "epoch": epoch})
             
-            print(f"Epoch {epoch+1:03d} | Val Loss (Dice+MSE): {avg_val_loss:.5f} | Raw Ligand MSE: {avg_masked_mse:.5f}")
+            print(f"Epoch {epoch+1:03d} | Val Loss: {avg_val_loss:.5f} | Raw Ligand MSE: {avg_masked_mse:.5f}")
             plot_metrics_local(history, RESULTS_DIR / "training_metrics.png")
             
             # --- CHECKPOINTING ---
-            # IMPORTANT: We now save based on the Validation Loss (Dice+MSE), not just MSE
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
                 print(f"   >>> New Best Val Loss! ({best_val_loss:.5f}) Saving weights...")
@@ -335,7 +332,6 @@ def main():
                     new_state_dict[name] = v
                 model.load_state_dict(new_state_dict)
             
-            # *** GENERATE SAMPLES WITH EXACT NAMING ***
             save_mrc_samples(model, val_data, "final_best_predictions", DEVICE, num_samples=5)
         else:
             print("Warning: No best model found.")
