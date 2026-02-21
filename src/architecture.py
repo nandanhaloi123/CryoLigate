@@ -204,7 +204,7 @@ class ConvTransBlock(nn.Module):
 #         return out
     
 class SCUNet(nn.Module):
-    def __init__(self, in_nc=2, config=[2,2,2,2,2,2,2], dim=32, drop_path_rate=0.2, 
+    def __init__(self, in_nc=2, config=[1,1,1,1,1,1,1], dim=32, drop_path_rate=0.2, 
                  input_resolution=96, head_dim=16, window_size=4, n_classes=1, 
                  ligand_dim=768): # <-- Note: Ensure this defaults to your 768 MolFormer dim!
         super(SCUNet, self).__init__()

@@ -1,0 +1,114 @@
+/home/x_nanha/.conda/envs/CryoLigate/lib/python3.9/site-packages/timm/models/layers/__init__.py:49: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /home/x_nanha/.netrc.
+wandb: Currently logged in as: nandanhaloi123 (nandanhaloi123-kth-royal-institute-of-technology) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run y0pcfw2a
+wandb: Tracking run with wandb version 0.24.2
+wandb: Run data is saved locally in /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/wandb/run-20260221_134338-y0pcfw2a
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run run_20260221_134335_MOLFORMER_aug
+wandb: ⭐️ View project at https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting
+wandb: 🚀 View run at https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting/runs/y0pcfw2a
+--- Training run_20260221_134335_MOLFORMER_aug on cuda ---
+--- USING MOLFORMER (768) + MASKED LOSS ---
+Loading embeddings from /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/data/processed/molformer_embeddings.pt...
+Loading embeddings from /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/data/processed/molformer_embeddings.pt...
+Loading embeddings from /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/data/processed/molformer_embeddings.pt...
+wandb: WARNING Saving files without folders. If you want to preserve subdirectories pass base_path to wandb.save, i.e. wandb.save("/mnt/folder/file.h5", base_path="/mnt")
+wandb: WARNING Symlinked 1 file into the W&B run directory; call wandb.save again to sync new files.
+Epoch 001 | Val Loss: 0.25162 | Raw Ligand MSE: 0.34632
+   >>> New Best Val Loss! (0.25162) Saving weights...
+Epoch 002 | Val Loss: 0.15433 | Raw Ligand MSE: 0.32338
+   >>> New Best Val Loss! (0.15433) Saving weights...
+Epoch 003 | Val Loss: 0.13907 | Raw Ligand MSE: 0.31303
+   >>> New Best Val Loss! (0.13907) Saving weights...
+Epoch 004 | Val Loss: 0.12862 | Raw Ligand MSE: 0.29596
+   >>> New Best Val Loss! (0.12862) Saving weights...
+Epoch 005 | Val Loss: 0.13938 | Raw Ligand MSE: 0.33057
+Epoch 006 | Val Loss: 0.12292 | Raw Ligand MSE: 0.28855
+   >>> New Best Val Loss! (0.12292) Saving weights...
+Epoch 007 | Val Loss: 0.13035 | Raw Ligand MSE: 0.30238
+Epoch 008 | Val Loss: 0.12103 | Raw Ligand MSE: 0.28916
+   >>> New Best Val Loss! (0.12103) Saving weights...
+Epoch 009 | Val Loss: 0.11763 | Raw Ligand MSE: 0.27756
+   >>> New Best Val Loss! (0.11763) Saving weights...
+Epoch 010 | Val Loss: 0.12245 | Raw Ligand MSE: 0.30141
+Epoch 011 | Val Loss: 0.12217 | Raw Ligand MSE: 0.30451
+Epoch 012 | Val Loss: 0.12843 | Raw Ligand MSE: 0.32687
+Epoch 013 | Val Loss: 0.13339 | Raw Ligand MSE: 0.35159
+Epoch 014 | Val Loss: 0.12202 | Raw Ligand MSE: 0.31465
+Epoch 015 | Val Loss: 0.12443 | Raw Ligand MSE: 0.31923
+Epoch 016 | Val Loss: 0.12094 | Raw Ligand MSE: 0.31369
+Epoch 017 | Val Loss: 0.11996 | Raw Ligand MSE: 0.31130
+Epoch 018 | Val Loss: 0.12467 | Raw Ligand MSE: 0.32959
+Epoch 019 | Val Loss: 0.12571 | Raw Ligand MSE: 0.33498
+Epoch 020 | Val Loss: 0.12775 | Raw Ligand MSE: 0.34195
+Epoch 021 | Val Loss: 0.13229 | Raw Ligand MSE: 0.35830
+Epoch 022 | Val Loss: 0.12798 | Raw Ligand MSE: 0.34510
+Epoch 023 | Val Loss: 0.12818 | Raw Ligand MSE: 0.34618
+Epoch 024 | Val Loss: 0.12879 | Raw Ligand MSE: 0.34834
+Epoch 025 | Val Loss: 0.12993 | Raw Ligand MSE: 0.35303
+Epoch 026 | Val Loss: 0.12818 | Raw Ligand MSE: 0.34706
+Epoch 027 | Val Loss: 0.12753 | Raw Ligand MSE: 0.34557
+Epoch 028 | Val Loss: 0.12943 | Raw Ligand MSE: 0.35234
+Epoch 029 | Val Loss: 0.13146 | Raw Ligand MSE: 0.35969
+Epoch 030 | Val Loss: 0.12961 | Raw Ligand MSE: 0.35368
+Epoch 031 | Val Loss: 0.12816 | Raw Ligand MSE: 0.34891
+Epoch 032 | Val Loss: 0.13297 | Raw Ligand MSE: 0.36538
+Epoch 033 | Val Loss: 0.13148 | Raw Ligand MSE: 0.36075
+Epoch 034 | Val Loss: 0.13120 | Raw Ligand MSE: 0.35996
+Epoch 035 | Val Loss: 0.12991 | Raw Ligand MSE: 0.35558
+Epoch 036 | Val Loss: 0.13146 | Raw Ligand MSE: 0.36104
+Epoch 037 | Val Loss: 0.13189 | Raw Ligand MSE: 0.36286
+Epoch 038 | Val Loss: 0.13162 | Raw Ligand MSE: 0.36189
+Epoch 039 | Val Loss: 0.13228 | Raw Ligand MSE: 0.36433
+Epoch 040 | Val Loss: 0.13052 | Raw Ligand MSE: 0.35827
+Epoch 041 | Val Loss: 0.13130 | Raw Ligand MSE: 0.36116
+Epoch 042 | Val Loss: 0.13333 | Raw Ligand MSE: 0.36806
+Epoch 043 | Val Loss: 0.13202 | Raw Ligand MSE: 0.36369
+Epoch 044 | Val Loss: 0.13394 | Raw Ligand MSE: 0.37024
+Epoch 045 | Val Loss: 0.13145 | Raw Ligand MSE: 0.36185
+Epoch 046 | Val Loss: 0.13144 | Raw Ligand MSE: 0.36196
+Epoch 047 | Val Loss: 0.13192 | Raw Ligand MSE: 0.36353
+Epoch 048 | Val Loss: 0.13169 | Raw Ligand MSE: 0.36283
+Epoch 049 | Val Loss: 0.13154 | Raw Ligand MSE: 0.36240
+Epoch 050 | Val Loss: 0.13171 | Raw Ligand MSE: 0.36298
+Epoch 051 | Val Loss: 0.13266 | Raw Ligand MSE: 0.36629
+Epoch 052 | Val Loss: 0.13235 | Raw Ligand MSE: 0.36519
+Epoch 053 | Val Loss: 0.13207 | Raw Ligand MSE: 0.36422
+Epoch 054 | Val Loss: 0.13266 | Raw Ligand MSE: 0.36632
+Epoch 055 | Val Loss: 0.13295 | Raw Ligand MSE: 0.36724
+Epoch 056 | Val Loss: 0.13239 | Raw Ligand MSE: 0.36536
+Epoch 057 | Val Loss: 0.13246 | Raw Ligand MSE: 0.36563
+Epoch 058 | Val Loss: 0.13211 | Raw Ligand MSE: 0.36446
+Epoch 059 | Val Loss: 0.13226 | Raw Ligand MSE: 0.36500
+wandb: updating run metadata
+wandb: uploading wandb-summary.json
+wandb: 
+wandb: Run history:
+wandb:      epoch ▁▁▁▁▁▂▂▂▂▂▃▃▃▃▃▃▄▄▄▄▄▅▅▅▅▅▅▆▆▆▆▆▆▇▇▇▇▇██
+wandb: masked_mse ▆▄▄▂▅▂▁▃▃▅▄▄▄▄▅▆▇▇▆▇▆█▇▇▇▇▇▇██▇▇▇▇▇█████
+wandb: train_loss █▆▅▅▄▄▃▃▃▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:   val_loss █▃▂▂▂▁▁▂▂▁▁▁▁▁▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂
+wandb: 
+wandb: Run summary:
+wandb:      epoch 59
+wandb: masked_mse 0.36576
+wandb: train_loss 0.02209
+wandb:   val_loss 0.13248
+wandb: 
+wandb: 🚀 View run run_20260221_134335_MOLFORMER_aug at: https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting/runs/y0pcfw2a
+wandb: ⭐️ View project at: https://wandb.ai/nandanhaloi123-kth-royal-institute-of-technology/cryoem-ligand-fitting
+wandb: Synced 8 W&B file(s), 0 media file(s), 0 artifact file(s) and 1 other file(s)
+wandb: Find logs at: ./wandb/run-20260221_134338-y0pcfw2a/logs
+Epoch 060 | Val Loss: 0.13248 | Raw Ligand MSE: 0.36576
+
+--- Training Ended. Finalizing... ---
+--- Loading Best Model Weights from /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/results/run_20260221_134335_MOLFORMER_aug/best_model.pth ---
+   >>> Generating 5 MRC samples for inspection...
+      Saving: 8t7u_ADP_4_pred.mrc
+      Saving: 8unt_GTP_1_pred.mrc
+      Saving: 8tz9_XMO_3_pred.mrc
+      Saving: 8tnx_OXL_2_pred.mrc
+      Saving: 8va1_V2V_1_pred.mrc
+--- Done. Check results in /proj/berzelius-2022-haloi/users/x_nanha/CryoLigate/results/run_20260221_134335_MOLFORMER_aug ---
