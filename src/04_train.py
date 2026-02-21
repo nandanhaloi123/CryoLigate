@@ -261,6 +261,7 @@ def main():
                 inputs, lig_emb, targets, lig_masks = inputs.to(DEVICE), lig_emb.to(DEVICE), targets.to(DEVICE), lig_masks.to(DEVICE)
                 optimizer.zero_grad()
                 preds = model(inputs, lig_emb)
+                preds = torch.sigmoid(preds)
                 
                 loss = criterion(preds, targets, mask=lig_masks) 
                 loss.backward()
