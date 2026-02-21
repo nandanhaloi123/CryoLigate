@@ -241,7 +241,8 @@ def main():
     model = SCUNet(in_nc=2, ligand_dim=CONFIG["ligand_dim"], window_size=4).to(DEVICE)
     if torch.cuda.device_count() > 1: model = nn.DataParallel(model)
     
-    optimizer = optim.AdamW(model.parameters(), lr=CONFIG["lr"])
+    # optimizer = optim.AdamW(model.parameters(), lr=CONFIG["lr"])
+    optimizer = optim.AdamW(model.parameters(), lr=CONFIG["lr"], weight_decay=1e-2)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
     
     criterion = HybridDiceLoss(dice_weight=CONFIG['dice_weight'], mse_weight=CONFIG['mse_weight']).to(DEVICE)

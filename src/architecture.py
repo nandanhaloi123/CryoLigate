@@ -129,10 +129,84 @@ class ConvTransBlock(nn.Module):
         x = x + res
         return x
 
+# class SCUNet(nn.Module):
+#     def __init__(self, in_nc=2, config=[2,2,2,2,2,2,2], dim=32, drop_path_rate=0.2, 
+#                  input_resolution=96, head_dim=16, window_size=4, n_classes=1, 
+#                  ligand_dim=1024):
+#         super(SCUNet, self).__init__()
+#         self.config = config
+#         self.dim = dim
+#         self.head_dim = head_dim
+#         self.window_size = window_size
+#         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(config))]
+        
+#         self.m_head = [nn.Conv3d(in_nc, dim, 3, 1, 1, bias=False)]
+        
+#         begin = 0
+#         self.m_down1 = [ConvTransBlock(dim//2, dim//2, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW', input_resolution) for i in range(config[0])] + [nn.Conv3d(dim, 2*dim, 2, 2, 0, bias=False)]
+#         begin += config[0]
+#         self.m_down2 = [ConvTransBlock(dim, dim, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW', input_resolution//2) for i in range(config[1])] + [nn.Conv3d(2*dim, 4*dim, 2, 2, 0, bias=False)]
+#         begin += config[1]
+#         self.m_down3 = [ConvTransBlock(2*dim, 2*dim, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW',input_resolution//4) for i in range(config[2])] + [nn.Conv3d(4*dim, 8*dim, 2, 2, 0, bias=False)]
+        
+#         # --- LIGAND INJECTION ---
+#         bottleneck_dim = 8 * dim
+#         self.ligand_proj = nn.Sequential(
+#             nn.Linear(ligand_dim, bottleneck_dim),
+#             nn.GELU(),
+#             nn.Linear(bottleneck_dim, bottleneck_dim),
+#             nn.Sigmoid()
+#         )
+        
+#         begin += config[2]
+#         self.m_body = [ConvTransBlock(4*dim, 4*dim, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW', input_resolution//8) for i in range(config[3])]
+        
+#         begin += config[3]
+#         self.m_up3 = [nn.ConvTranspose3d(8*dim, 4*dim, 2, 2, 0, bias=False),] + \
+#                      [ConvTransBlock(2*dim, 2*dim, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW',input_resolution//4) for i in range(config[4])]
+        
+#         begin += config[4]
+#         self.m_up2 = [nn.ConvTranspose3d(4*dim, 2*dim, 2, 2, 0, bias=False),] + \
+#                      [ConvTransBlock(dim, dim, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW', input_resolution//2) for i in range(config[5])]
+        
+#         begin += config[5]
+#         self.m_up1 = [nn.ConvTranspose3d(2*dim, dim, 2, 2, 0, bias=False),] + \
+#                      [ConvTransBlock(dim//2, dim//2, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW', input_resolution) for i in range(config[6])]
+        
+#         self.m_tail = [nn.Conv3d(dim, n_classes, 3, 1, 1, bias=False)]
+
+#         self.m_head = nn.Sequential(*self.m_head)
+#         self.m_down1 = nn.Sequential(*self.m_down1)
+#         self.m_down2 = nn.Sequential(*self.m_down2)
+#         self.m_down3 = nn.Sequential(*self.m_down3)
+#         self.m_body = nn.Sequential(*self.m_body)
+#         self.m_up3 = nn.Sequential(*self.m_up3)
+#         self.m_up2 = nn.Sequential(*self.m_up2)
+#         self.m_up1 = nn.Sequential(*self.m_up1)
+#         self.m_tail = nn.Sequential(*self.m_tail)  
+
+#     def forward(self, x, ligand_emb):
+#         x1 = self.m_head(x)
+#         x2 = self.m_down1(x1)
+#         x3 = self.m_down2(x2)
+#         x4 = self.m_down3(x3) 
+        
+#         # --- INJECTION ---
+#         lig_feat = self.ligand_proj(ligand_emb)
+#         lig_feat = lig_feat.view(lig_feat.shape[0], lig_feat.shape[1], 1, 1, 1)
+#         x4 = x4 * (1 + lig_feat) + lig_feat
+        
+#         x_body = self.m_body(x4)
+#         x_up3 = self.m_up3(x_body+x4)
+#         x_up2 = self.m_up2(x_up3+x3)
+#         x_up1 = self.m_up1(x_up2+x2)
+#         out = self.m_tail(x_up1+x1)
+#         return out
+    
 class SCUNet(nn.Module):
     def __init__(self, in_nc=2, config=[2,2,2,2,2,2,2], dim=32, drop_path_rate=0.2, 
                  input_resolution=96, head_dim=16, window_size=4, n_classes=1, 
-                 ligand_dim=1024):
+                 ligand_dim=768): # <-- Note: Ensure this defaults to your 768 MolFormer dim!
         super(SCUNet, self).__init__()
         self.config = config
         self.dim = dim
@@ -157,6 +231,10 @@ class SCUNet(nn.Module):
             nn.Linear(bottleneck_dim, bottleneck_dim),
             nn.Sigmoid()
         )
+        
+        # --- ADDED: BOTTLENECK DROPOUT ---
+        # 30% dropout at the deepest part of the network to prevent 3D grid memorization
+        self.bottleneck_dropout = nn.Dropout3d(p=0.3) 
         
         begin += config[2]
         self.m_body = [ConvTransBlock(4*dim, 4*dim, self.head_dim, self.window_size, dpr[i+begin], 'W' if not i%2 else 'SW', input_resolution//8) for i in range(config[3])]
@@ -194,7 +272,13 @@ class SCUNet(nn.Module):
         # --- INJECTION ---
         lig_feat = self.ligand_proj(ligand_emb)
         lig_feat = lig_feat.view(lig_feat.shape[0], lig_feat.shape[1], 1, 1, 1)
+        
+        # Apply the embedding
         x4 = x4 * (1 + lig_feat) + lig_feat
+        
+        # --- ADDED: APPLY DROPOUT AFTER INJECTION ---
+        # This scrambles the exact spatial layout just enough to force the decoder to learn robustly
+        x4 = self.bottleneck_dropout(x4)
         
         x_body = self.m_body(x4)
         x_up3 = self.m_up3(x_body+x4)

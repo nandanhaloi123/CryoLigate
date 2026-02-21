@@ -7,4 +7,4 @@
 
 # Execute your code
 #python src/03_precompute_molformer.py
-python src/04_train.py
+python src/04_train.py --augment
